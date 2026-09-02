@@ -1,0 +1,8 @@
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks-system
+        # gitleaks側の.pre-commit-hooks.yamlにpass_filenames: falseが
+        # 欠けているため、ここで明示的に上書きする
+        pass_filenames: false

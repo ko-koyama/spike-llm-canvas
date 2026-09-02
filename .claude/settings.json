@@ -1,0 +1,46 @@
+{
+  "permissions": {
+    "ask": [
+      "Bash(git push:*)",
+      "Bash(terraform apply:*)",
+      "Bash(terraform destroy:*)",
+      "Bash(gh pr merge:*)"
+    ],
+    "deny": [
+      "Read(**/.env)",
+      "Read(**/*.tfstate)",
+      "Read(**/*.tfstate.backup)",
+      "Read(**/*.tfvars)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.file_path' | { read file_path; if echo \"$file_path\" | grep -q '\\.py$'; then ruff format \"$file_path\" && ruff check --fix \"$file_path\"; fi; }"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "agent",
+            "if": "Bash(git commit*)",
+            "prompt": "git diff --staged を実行し、ステージされた変更に秘密鍵、APIキー、パスワードなど機密情報が含まれていないか確認してください。既知のパターンに一致しない、文脈的に怪しいものも含めて判断してください。問題があれば ok:false とその理由を、問題なければ ok:true を返してください。",
+            "timeout": 60
+          }
+        ]
+      }
+    ]
+  },
+  "enabledPlugins": {
+    "aws-core@agent-toolkit-for-aws": true,
+    "superpowers@claude-plugins-official": true
+  }
+}

@@ -1,0 +1,17 @@
+{
+  // 依存関係が入った.venvをインタープリタとして使う
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+  "[python]": {
+    // 保存時にruffで自動整形・自動修正
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.fixAll": "explicit",
+      "source.organizeImports": "explicit"
+    }
+  },
+  // pytestをテストランナーとして使う
+  "python.testing.pytestEnabled": true,
+  // srcディレクトリをインポート解決の対象に追加(tests/からmainをimportできるようにするため)
+  "python.analysis.extraPaths": ["${workspaceFolder}/src"]
+}

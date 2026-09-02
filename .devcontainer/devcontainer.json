@@ -1,0 +1,46 @@
+{
+  "name": "python-template",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+  "features": {
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.12"
+    },
+    "ghcr.io/devcontainers/features/node:2": {
+      "version": "24"
+    },
+    "ghcr.io/devcontainers/features/aws-cli:1": {},
+    "ghcr.io/devcontainers/features/terraform:1": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/anthropics/devcontainer-features/claude-code:1": {}
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        // Python
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "charliermarsh.ruff",
+
+        // Terraform / AWS
+        "hashicorp.terraform",
+        "amazonwebservices.aws-toolkit-vscode",
+
+        // 全般
+        "oderwat.indent-rainbow",
+        "mechatroner.rainbow-csv",
+        "janisdd.vscode-edit-csv",
+        "github.vscode-pull-request-github"
+      ]
+    }
+  },
+  "mounts": [
+    "source=aws-config-${devcontainerId},target=/home/vscode/.aws,type=volume",
+    "source=claude-code-config-${devcontainerId},target=/home/vscode/.claude,type=volume",
+    "source=gh-config-${devcontainerId},target=/home/vscode/.config/gh,type=volume"
+  ],
+  "containerEnv": {
+    "CLAUDE_CONFIG_DIR": "/home/vscode/.claude"
+  },
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+  "remoteUser": "vscode"
+}
