@@ -1,6 +1,6 @@
 {
-  // 依存関係が入った.venvをインタープリタとして使う
-  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+  // 依存関係が入ったbackend/.venvをインタープリタとして使う
+  "python.defaultInterpreterPath": "${workspaceFolder}/backend/.venv/bin/python",
   "[python]": {
     // 保存時にruffで自動整形・自動修正
     "editor.defaultFormatter": "charliermarsh.ruff",
@@ -10,8 +10,6 @@
       "source.organizeImports": "explicit"
     }
   },
-  // pytestをテストランナーとして使う
-  "python.testing.pytestEnabled": true,
-  // srcディレクトリをインポート解決の対象に追加(tests/からmainをimportできるようにするため)
-  "python.analysis.extraPaths": ["${workspaceFolder}/src"]
+  // backendディレクトリをインポート解決の対象に追加
+  "python.analysis.extraPaths": ["${workspaceFolder}/backend"]
 }

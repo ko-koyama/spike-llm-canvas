@@ -33,6 +33,11 @@
       ]
     }
   },
+  "forwardPorts": [8000, 5173],
+  "portsAttributes": {
+    "8000": { "label": "backend (FastAPI)" },
+    "5173": { "label": "frontend (Vite)" }
+  },
   "mounts": [
     "source=aws-config-${devcontainerId},target=/home/vscode/.aws,type=volume",
     "source=claude-code-config-${devcontainerId},target=/home/vscode/.claude,type=volume",

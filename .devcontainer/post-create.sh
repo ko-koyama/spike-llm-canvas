@@ -18,11 +18,14 @@ curl -LsSf -o "/tmp/gitleaks_checksums.txt" \
 sudo tar -xzf "/tmp/${GITLEAKS_TARBALL}" -C /usr/local/bin gitleaks
 rm -f "/tmp/${GITLEAKS_TARBALL}" "/tmp/gitleaks_checksums.txt"
 
-# pyproject.tomlのパッケージを.venvに同期
-"$HOME/.local/bin/uv" sync
+# backend/pyproject.tomlのパッケージをbackend/.venvに同期
+(cd backend && "$HOME/.local/bin/uv" sync)
 
-# pre-commitのgitフックを有効化
-"$HOME/.local/bin/uv" run pre-commit install
+# frontendのパッケージをインストール
+npm --prefix frontend install
+
+# pre-commitのgitフックを有効化(backendの依存に含めず、uvxで隔離実行する)
+"$HOME/.local/bin/uvx" pre-commit install
 
 # Claude Codeのプラグインマーケットプレイスを登録
 # (.claude/settings.jsonのenabledPluginsを有効化するために必要)
