@@ -67,6 +67,7 @@ def render_chart(
         "type": style,
         "data": {"labels": labels, "datasets": datasets},
         "options": {
+            "maintainAspectRatio": False,
             "plugins": {"title": {"display": bool(title), "text": title}},
             "scales": {
                 "x": {
