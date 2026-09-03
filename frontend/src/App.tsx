@@ -49,12 +49,16 @@ export default function App() {
     <div className="app">
       <div className="messages">
         {messages.map((m) => (
-          <div key={m.id} className={`msg ${m.role}`}>
+          <div key={m.id} className={`turn ${m.role}`}>
             {m.blocks.map((b, i) =>
               b.type === 'chart' ? (
-                <iframe key={i} className="chart" srcDoc={b.html} sandbox="allow-scripts" />
+                <div key={i} className="chart-panel">
+                  <iframe className="chart" srcDoc={b.html} sandbox="allow-scripts" />
+                </div>
               ) : (
-                <p key={i}>{b.text}</p>
+                <div key={i} className={`msg ${m.role}`}>
+                  {b.text}
+                </div>
               ),
             )}
           </div>
