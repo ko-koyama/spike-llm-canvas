@@ -1,9 +1,11 @@
 import { useState } from 'react'
 
+type Block = { type: 'text'; text: string } | { type: 'chart'; html: string }
+
 type Message = {
   id: string
   role: 'user' | 'assistant'
-  content: string
+  blocks: Block[]
 }
 
 // ページを開いている間だけ会話を続けるためのID。リロードで新しい会話になる。
@@ -19,7 +21,10 @@ export default function App() {
     const message = input.trim()
     if (!message || loading) return
 
-    setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: 'user', content: message }])
+    setMessages((prev) => [
+      ...prev,
+      { id: crypto.randomUUID(), role: 'user', blocks: [{ type: 'text', text: message }] },
+    ])
     setInput('')
     setError(null)
     setLoading(true)
@@ -31,8 +36,8 @@ export default function App() {
         body: JSON.stringify({ message, session_id: sessionId }),
       })
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
-      const data: { reply: string } = await res.json()
-      setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: 'assistant', content: data.reply }])
+      const data: { blocks: Block[] } = await res.json()
+      setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: 'assistant', blocks: data.blocks }])
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -45,7 +50,13 @@ export default function App() {
       <div className="messages">
         {messages.map((m) => (
           <div key={m.id} className={`msg ${m.role}`}>
-            {m.content}
+            {m.blocks.map((b, i) =>
+              b.type === 'chart' ? (
+                <iframe key={i} className="chart" srcDoc={b.html} sandbox="allow-scripts" />
+              ) : (
+                <p key={i}>{b.text}</p>
+              ),
+            )}
           </div>
         ))}
         {loading && <div className="msg assistant pending">考え中...</div>}
