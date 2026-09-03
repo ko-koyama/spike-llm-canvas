@@ -4,6 +4,8 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 from strands import Agent
 
+from tools import render_chart
+
 # 会話履歴は永続化せず、プロセスが生きている間だけメモリ上に保持する。
 AGENTS: dict[str, Agent] = {}
 
@@ -28,6 +30,6 @@ def healthz() -> dict[str, str]:
 
 @app.post("/api/chat")
 async def chat(req: ChatRequest) -> ChatResponse:
-    agent = AGENTS.setdefault(req.session_id, Agent())
+    agent = AGENTS.setdefault(req.session_id, Agent(tools=[render_chart]))
     result = await agent.invoke_async(req.message)
     return ChatResponse(reply=str(result))
