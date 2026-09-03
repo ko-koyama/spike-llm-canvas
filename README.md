@@ -1,6 +1,6 @@
 # spike-llm-canvas
 
-Strands Agent を使ったシンプルなAIチャットの検証用リポジトリ
+Strands Agentのtool useを使った、チャット上でのグラフ描画などを検証するリポジトリ
 
 ## ディレクトリ構成
 
@@ -31,4 +31,4 @@ npm run dev
 
 - AWS認証はローカルの認証情報(`aws login`済みのプロファイル)をそのまま利用する
 - 会話履歴はプロセス内メモリのみで保持し、永続化しない(サーバー再起動で消える)
-- ツール・MCP接続・認証は無し。Bedrock経由のClaude Sonnetとの素の会話のみ
+- MCP接続・外部サービス認証は無し。Bedrock経由のClaude Sonnetとの会話に、`render_chart`(グラフ表示)ツールを追加している
