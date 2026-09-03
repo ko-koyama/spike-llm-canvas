@@ -11,5 +11,9 @@
     }
   },
   // backendディレクトリをインポート解決の対象に追加
-  "python.analysis.extraPaths": ["${workspaceFolder}/backend"]
+  "python.analysis.extraPaths": ["${workspaceFolder}/backend"],
+  "[html]": {
+    // HTMLは2スペースインデントを既定にする(indent-rainbowの誤検知防止)
+    "editor.tabSize": 2
+  }
 }
