@@ -4,10 +4,22 @@ import json
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from strands import tool
 
 _CHART_TEMPLATE = (Path(__file__).parent / "templates" / "chart.html").read_text()
+
+# 系列カラー未指定時のデフォルト配色
+_DEFAULT_SERIES_COLORS = [
+    "#0081cf",  # 青
+    "#eb6834",  # オレンジ
+    "#1baf7a",  # アクア
+    "#eda100",  # 黄
+    "#e87ba4",  # マゼンタ
+    "#008300",  # 緑
+    "#4a3aa7",  # 紫
+    "#e34948",  # 赤
+]
 
 
 class ChartPoint(BaseModel):
@@ -21,7 +33,10 @@ class ChartSeries(BaseModel):
     """1本分のデータ系列。"""
 
     name: str | None = None
-    color: str | None = None
+    color: str | None = Field(
+        default=None,
+        description="ユーザーが明示的に色を指定した場合のみ設定すること。指定がなければデフォルト配色が使われる。",
+    )
     values: list[float] | None = None
     points: list[ChartPoint] | None = None
 
@@ -49,17 +64,18 @@ def render_chart(
 
     labels = x_axis.data if x_axis else None
     datasets = []
-    for s in series:
+    for i, s in enumerate(series):
         if style == "scatter":
             data = [{"x": p.x, "y": p.y} for p in (s.points or [])]
         else:
             data = s.values or []
+        color = s.color or _DEFAULT_SERIES_COLORS[i % len(_DEFAULT_SERIES_COLORS)]
         datasets.append(
             {
                 "label": s.name,
                 "data": data,
-                "borderColor": s.color,
-                "backgroundColor": s.color,
+                "borderColor": color,
+                "backgroundColor": color,
             }
         )
 
