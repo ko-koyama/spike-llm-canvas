@@ -33,20 +33,27 @@
 
    ```
    npx mapshaper N03-*.shp \
+     -proj wgs84 \
      -dissolve2 fields=N03_001 \
-     -simplify dp 5% keep-shapes \
-     -o format=geojson backend/data/japan_prefectures.geojson
+     -rename-fields name=N03_001 \
+     -simplify dp 0.3% keep-shapes \
+     -clean \
+     -o format=geojson precision=0.0001 backend/data/japan_prefectures.geojson
    ```
 
+   - `-proj wgs84`: 座標系をWGS84(緯度経度)に統一
    - `-dissolve2`: 市区町村ポリゴンを都道府県単位に統合
-   - `-simplify ... keep-shapes`: 小さい県(香川など)や離島が消えないよう保護しつつ軽量化
+   - `-rename-fields`: 属性名`N03_001`(都道府県名)を`name`に変更
+   - `-simplify ... keep-shapes`: 小さい県(香川など)や離島が消えないよう保護しつつ軽量化(実測を踏まえ0.3%を採用)
+   - `-clean`: simplify後の不要頂点・ジオメトリ異常を除去
+   - `precision=0.0001`: 出力座標の精度を丸めてファイルサイズを削減
 3. 同じ元データから、都道府県名→代表点(緯度経度)の対応表 `backend/data/prefecture_points.json` を作成する
    - スパイダーマップの起点・終点座標に使う代表点(県庁所在地など)であり、ポリゴンの重心ではなく実際の都市座標を使う(参考実装と同じ考え方)
    - これにより実行時にshapelyなどの幾何ライブラリを追加する必要がなくなる
    - このJSONのキー(47都道府県名)が、`render_map`への入力バリデーションの正解データにもなる
 4. 前処理の手順は`scripts/`配下にドキュメント化する(スクリプト化は実装時に判断)
 
-**保留事項:** 加工後の`japan_prefectures.geojson`はサイズが大きくなる可能性があり(都道府県単位まで簡略化しても数百KB〜規模を想定)、リポジトリにコミットするか、`.gitignore`対象にして前処理スクリプトから都度生成する運用にするかは未確定。実装時にファイルサイズの実測値を見てから判断する。
+**決定事項:** 加工後の`japan_prefectures.geojson`は752,860 bytes(約735KB)となり、1MB未満に収まったためリポジトリにコミット済み。
 
 ## tool設計
 
@@ -84,7 +91,7 @@ def render_map(
 
 ## 実装構成
 
-- `backend/data/japan_prefectures.geojson` — 前処理済み都道府県ポリゴン(dissolve+simplify済み)。コミットするか生成物として扱うかは保留(データパイプライン節を参照)
+- `backend/data/japan_prefectures.geojson` — 前処理済み都道府県ポリゴン(dissolve+simplify済み)。752,860 bytes(約735KB)でコミット済み(データパイプライン節を参照)
 - `backend/data/prefecture_points.json` — 47都道府県名→代表点(緯度経度)の対応表
 - `backend/templates/map.html` — `chart.html`と同構成の新規テンプレート。ECharts CDN読み込み + `{{map_config}}`(EChartsのoption)と`{{prefectures_geojson}}`(GeoJSON文字列)をプレースホルダ置換
 - `backend/tools.py` — `MapPoint`モデルと`render_map`関数を追加。geojson/pointsのJSONはモジュールロード時に1回だけ読み込む(`_CHART_TEMPLATE`と同じパターン)

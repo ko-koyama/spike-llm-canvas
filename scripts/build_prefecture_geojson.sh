@@ -18,7 +18,7 @@ curl -L -o "${WORKDIR}/N03.zip" \
 echo "==> 展開中..."
 python3 -m zipfile -e "${WORKDIR}/N03.zip" "${WORKDIR}/N03"
 
-SHP="$(find "${WORKDIR}/N03" -name '*.shp' | head -1)"
+SHP="$(find "${WORKDIR}/N03" -name '*.shp' ! -name '*_prefecture.shp' | sort | head -1)"
 if [ -z "$SHP" ]; then
   echo "shapefileが見つかりませんでした" >&2
   exit 1

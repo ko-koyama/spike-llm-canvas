@@ -18,7 +18,7 @@ class Block(BaseModel):
 
 
 def messages_to_blocks(messages: list[Message]) -> list[Block]:
-    """assistantの発言とrender_chartの結果を、発生順のブロック列に変換する。"""
+    """assistantの発言とHTML描画ツール(render_chart/render_map)の結果を、発生順のブロック列に変換する。"""
     html_tool_use_ids: set[str] = set()
     blocks: list[Block] = []
 

@@ -145,6 +145,8 @@ def render_map(
     # strandsは引数を生のdictで渡すため、Pydanticモデルへ明示的に変換する。
     points = [MapPoint.model_validate(p) for p in points]
 
+    if not points:
+        raise ValueError("pointsが空です")
     for point in points:
         if point.prefecture not in _PREFECTURE_POINTS:
             raise ValueError(f"未知の都道府県名です: {point.prefecture}")
@@ -186,6 +188,7 @@ def render_map(
                         },
                     }
                     for p in points
+                    if p.prefecture != origin
                 ],
             }
         )
@@ -195,6 +198,7 @@ def render_map(
         "tooltip": {},
         "legend": {"data": [s["name"] for s in series]},
         "visualMap": {
+            "seriesIndex": 0,
             "min": value_min,
             "max": value_max,
             "calculable": True,
