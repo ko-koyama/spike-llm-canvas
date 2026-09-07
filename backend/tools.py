@@ -157,18 +157,19 @@ def render_map(
     value_min = min(values) if values else 0.0
     value_max = max(values) if values else 0.0
 
+    # geoコンポーネントを常に用意し、凡例で「塗り分け」系列を非表示にしても
+    # 地図の輪郭自体は残るようにする(originなし時に画面が真っ白になるのを防ぐ)
+    geo = {"map": _MAP_NAME, "roam": False}
     map_series: dict = {
         "name": "塗り分け",
         "type": "map",
         "map": _MAP_NAME,
+        "geoIndex": 0,
         "data": [{"name": p.prefecture, "value": p.value} for p in points],
     }
     series = [map_series]
-    geo = None
 
     if origin is not None:
-        geo = {"map": _MAP_NAME, "roam": False}
-        map_series["geoIndex"] = 0
         origin_coord = _PREFECTURE_POINTS[origin]
         series.append(
             {
@@ -204,10 +205,9 @@ def render_map(
             "calculable": True,
             "inRange": {"color": ["#eef6ff", _DEFAULT_SERIES_COLORS[0]]},
         },
+        "geo": geo,
         "series": series,
     }
-    if geo is not None:
-        option["geo"] = geo
 
     html = _MAP_TEMPLATE.replace("{{prefectures_geojson}}", _PREFECTURES_GEOJSON)
     return html.replace("{{map_config}}", json.dumps(option))
