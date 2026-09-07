@@ -13,7 +13,26 @@
     <script>
       echarts.registerMap('japan-prefectures', {{prefectures_geojson}});
       const chart = echarts.init(document.getElementById('map'));
-      chart.setOption({{map_config}});
+      const option = {{map_config}};
+      chart.setOption(option);
+
+      // スパイダーマップ(linesシリーズ)のみ、ポリゴンホバーと線ホバーを連動させる
+      const lineSeriesIndex = option.series.findIndex((s) => s.type === 'lines');
+      if (lineSeriesIndex !== -1) {
+        const lineData = option.series[lineSeriesIndex].data;
+        chart.on('mouseover', { geoIndex: 0 }, (params) => {
+          const dataIndex = lineData.findIndex((d) => d.name === params.name);
+          if (dataIndex !== -1) {
+            chart.dispatchAction({ type: 'highlight', seriesIndex: lineSeriesIndex, dataIndex });
+          }
+        });
+        chart.on('mouseout', { geoIndex: 0 }, (params) => {
+          const dataIndex = lineData.findIndex((d) => d.name === params.name);
+          if (dataIndex !== -1) {
+            chart.dispatchAction({ type: 'downplay', seriesIndex: lineSeriesIndex, dataIndex });
+          }
+        });
+      }
     </script>
   </body>
 </html>

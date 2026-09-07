@@ -196,6 +196,8 @@ def render_spider(origin: str, points: list[MapPoint]) -> str:
                     "opacity": 0.6,
                     "curveness": 0.2,
                 },
+                "emphasis": {"focus": "self"},
+                "blur": {"lineStyle": {"opacity": 0.1}},
                 "data": [
                     {
                         "name": p.prefecture,
