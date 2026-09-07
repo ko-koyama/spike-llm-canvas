@@ -183,6 +183,8 @@ def render_spider(origin: str, points: list[MapPoint]) -> str:
     value_max = max(values) if values else 0.0
     origin_coord = _PREFECTURE_POINTS[origin]
 
+    dest_points = [p for p in points if p.prefecture != origin]
+
     option = {
         "tooltip": {},
         "geo": _base_geo(),
@@ -207,10 +209,20 @@ def render_spider(origin: str, points: list[MapPoint]) -> str:
                             "width": _scale_line_width(p.value, value_min, value_max)
                         },
                     }
-                    for p in points
-                    if p.prefecture != origin
+                    for p in dest_points
                 ],
-            }
+            },
+            # ポリゴンホバー時に線と同じ値入り吹き出しを出すための透明な当たり判定レイヤー
+            {
+                "type": "map",
+                "map": _MAP_NAME,
+                "geoIndex": 0,
+                "tooltip": {"formatter": "{b}　{c}"},
+                "data": [{"name": p.prefecture, "value": p.value} for p in dest_points],
+                "itemStyle": {"color": "transparent", "borderWidth": 0},
+                "label": {"show": False},
+                "emphasis": {"label": {"show": False}, "itemStyle": {"color": "transparent"}},
+            },
         ],
     }
 
