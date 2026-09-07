@@ -74,7 +74,6 @@ class MapPoint(BaseModel):
 def render_map(
     points: list[MapPoint],
     origin: str | None = None,  # 指定すると、originから各pointへの流動線レイヤーを重ねて表示する
-    title: str | None = None,
 ) -> str:
     """都道府県単位の数値を地図上に塗り分け表示する。originを指定すると流動線も重ねて表示する。"""
 ```
@@ -84,7 +83,8 @@ def render_map(
 - `origin`未指定 → 塗り分け(コロプレス)のみのシンプルな地図
 - `origin`指定 → 塗り分け + 流動線(スパイダー)を1枚のEChartsマップに重ねて表示
   - `origin`から各`points`への線を引き、`value`が大きいほど線を太くする(線幅はmin-max線形補間、参考実装の`wScale`と同等の計算をPython側で行う)
-- 色分け(コロプレス)は自前でスケール計算せず、EChartsの`visualMap`コンポーネント(値→色の連続グラデーション)に任せる
+- 色分け(コロプレス)は自前でスケール計算せず、EChartsの`visualMap`コンポーネント(値→色の連続グラデーション)に任せる。ただし色分けの尺度バー(グラデーションの凡例UI)自体は表示しない(`visualMap.show: false`)。地図が主役であり、数値の目盛りは不要という方針のため
+- タイトルは表示しない(地図が主役のため、`render_chart`のような`title`引数は持たない)
 - 塗り分け・流動線の両レイヤーの表示/非表示切り替えは、ECharts標準の凡例(legend)クリックで行う(カスタムJS・チェックボックスUIは実装しない)
 
 ### バリデーション

@@ -139,7 +139,6 @@ class MapPoint(BaseModel):
 def render_map(
     points: list[MapPoint],
     origin: str | None = None,
-    title: str | None = None,
 ) -> str:
     """都道府県単位の数値を地図上に塗り分け表示する。originを指定すると流動線も重ねて表示する。"""
     # strandsは引数を生のdictで渡すため、Pydanticモデルへ明示的に変換する。
@@ -202,14 +201,13 @@ def render_map(
         )
 
     option = {
-        "title": {"text": title} if title else {},
         "tooltip": {},
         "legend": {"data": [s["name"] for s in series]},
         "visualMap": {
+            "show": False,
             "seriesIndex": 0,
             "min": value_min,
             "max": value_max,
-            "calculable": True,
             "inRange": {"color": ["#eef6ff", _DEFAULT_SERIES_COLORS[0]]},
         },
         "geo": geo,
