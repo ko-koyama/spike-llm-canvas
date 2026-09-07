@@ -159,13 +159,20 @@ def render_map(
 
     # geoコンポーネントを常に用意し、凡例で「塗り分け」系列を非表示にしても
     # 地図の輪郭自体は残るようにする(originなし時に画面が真っ白になるのを防ぐ)
-    geo = {"map": _MAP_NAME, "roam": False}
+    geo = {
+        "map": _MAP_NAME,
+        "roam": False,
+        "label": {"show": False},
+        "emphasis": {"label": {"show": False}},
+    }
     map_series: dict = {
         "name": "塗り分け",
         "type": "map",
         "map": _MAP_NAME,
         "geoIndex": 0,
         "data": [{"name": p.prefecture, "value": p.value} for p in points],
+        "label": {"show": False},
+        "emphasis": {"label": {"show": False}},
     }
     series = [map_series]
 
