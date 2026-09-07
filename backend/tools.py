@@ -8,6 +8,16 @@ from pydantic import BaseModel, Field
 from strands import tool
 
 _CHART_TEMPLATE = (Path(__file__).parent / "templates" / "chart.html").read_text()
+_MAP_TEMPLATE = (Path(__file__).parent / "templates" / "map.html").read_text()
+_PREFECTURES_GEOJSON = (
+    Path(__file__).parent / "data" / "japan_prefectures.geojson"
+).read_text()
+_PREFECTURE_POINTS: dict[str, list[float]] = json.loads(
+    (Path(__file__).parent / "data" / "prefecture_points.json").read_text()
+)
+
+_MAP_NAME = "japan-prefectures"
+_LINE_WIDTH_RANGE = (1.0, 12.0)
 
 # 系列カラー未指定時のデフォルト配色
 _DEFAULT_SERIES_COLORS = [
@@ -116,3 +126,93 @@ def render_chart(
     }
 
     return _CHART_TEMPLATE.replace("{{chart_config}}", json.dumps(config))
+
+
+class MapPoint(BaseModel):
+    """地図上の1地点(都道府県名で指定)。"""
+
+    prefecture: str  # 都道府県名(例: "東京都")。47都道府県の名称と完全一致させる
+    value: float | None = None  # 塗り分けの濃淡、および流動線の太さに使う数値
+
+
+@tool
+def render_map(
+    points: list[MapPoint],
+    origin: str | None = None,
+    title: str | None = None,
+) -> str:
+    """都道府県単位の数値を地図上に塗り分け表示する。originを指定すると流動線も重ねて表示する。"""
+    # strandsは引数を生のdictで渡すため、Pydanticモデルへ明示的に変換する。
+    points = [MapPoint.model_validate(p) for p in points]
+
+    for point in points:
+        if point.prefecture not in _PREFECTURE_POINTS:
+            raise ValueError(f"未知の都道府県名です: {point.prefecture}")
+    if origin is not None and origin not in _PREFECTURE_POINTS:
+        raise ValueError(f"未知の都道府県名です: {origin}")
+
+    values = [p.value for p in points if p.value is not None]
+    value_min = min(values) if values else 0.0
+    value_max = max(values) if values else 0.0
+
+    map_series: dict = {
+        "name": "塗り分け",
+        "type": "map",
+        "map": _MAP_NAME,
+        "data": [{"name": p.prefecture, "value": p.value} for p in points],
+    }
+    series = [map_series]
+    geo = None
+
+    if origin is not None:
+        geo = {"map": _MAP_NAME, "roam": False}
+        map_series["geoIndex"] = 0
+        origin_coord = _PREFECTURE_POINTS[origin]
+        series.append(
+            {
+                "name": "流動線",
+                "type": "lines",
+                "coordinateSystem": "geo",
+                "lineStyle": {
+                    "color": _DEFAULT_SERIES_COLORS[1],
+                    "opacity": 0.6,
+                    "curveness": 0.2,
+                },
+                "data": [
+                    {
+                        "coords": [origin_coord, _PREFECTURE_POINTS[p.prefecture]],
+                        "lineStyle": {
+                            "width": _scale_line_width(p.value, value_min, value_max)
+                        },
+                    }
+                    for p in points
+                ],
+            }
+        )
+
+    option = {
+        "title": {"text": title} if title else {},
+        "tooltip": {},
+        "legend": {"data": [s["name"] for s in series]},
+        "visualMap": {
+            "min": value_min,
+            "max": value_max,
+            "calculable": True,
+            "inRange": {"color": ["#eef6ff", _DEFAULT_SERIES_COLORS[0]]},
+        },
+        "series": series,
+    }
+    if geo is not None:
+        option["geo"] = geo
+
+    html = _MAP_TEMPLATE.replace("{{prefectures_geojson}}", _PREFECTURES_GEOJSON)
+    return html.replace("{{map_config}}", json.dumps(option))
+
+
+def _scale_line_width(value: float | None, value_min: float, value_max: float) -> float:
+    """値をmin-maxで線幅にスケーリングする。"""
+    width_min, width_max = _LINE_WIDTH_RANGE
+    if value is None or value_max <= value_min:
+        return width_min
+    ratio = (value - value_min) / (value_max - value_min)
+    return width_min + ratio * (width_max - width_min)
