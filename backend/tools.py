@@ -159,6 +159,7 @@ def render_choropleth(points: list[MapPoint]) -> str:
                 "type": "map",
                 "map": _MAP_NAME,
                 "geoIndex": 0,
+                "tooltip": {"formatter": "{b}　{c}"},
                 "data": [{"name": p.prefecture, "value": p.value} for p in points],
                 "label": {"show": False},
                 "emphasis": {"label": {"show": False}},
@@ -189,6 +190,7 @@ def render_spider(origin: str, points: list[MapPoint]) -> str:
             {
                 "type": "lines",
                 "coordinateSystem": "geo",
+                "tooltip": {"formatter": "{b}　{c}"},
                 "lineStyle": {
                     "color": _DEFAULT_SERIES_COLORS[1],
                     "opacity": 0.6,
@@ -196,6 +198,8 @@ def render_spider(origin: str, points: list[MapPoint]) -> str:
                 },
                 "data": [
                     {
+                        "name": p.prefecture,
+                        "value": p.value,
                         "coords": [origin_coord, _PREFECTURE_POINTS[p.prefecture]],
                         "lineStyle": {
                             "width": _scale_line_width(p.value, value_min, value_max)
@@ -221,10 +225,17 @@ def _validate_map_points(points: list[MapPoint]) -> None:
 
 
 def _base_geo() -> dict:
-    """都道府県地図のgeoコンポーネント設定(全ツール共通)。"""
+    """都道府県地図のgeoコンポーネント設定(全ツール共通)。
+
+    離島(南鳥島・沖ノ鳥島など)まで自動フィット範囲に含まれると本州が
+    小さく表示されてしまうため、centerとzoomで本土がほぼ収まる範囲に
+    初期表示を固定する(roam: trueなのでユーザー側でさらに調整可能)。
+    """
     return {
         "map": _MAP_NAME,
         "roam": True,
+        "center": [137, 37.5],
+        "zoom": 1.6,
         "label": {"show": False},
         "emphasis": {"label": {"show": False}},
     }

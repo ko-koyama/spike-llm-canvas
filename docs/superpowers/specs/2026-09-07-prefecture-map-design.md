@@ -85,7 +85,9 @@ def render_spider(origin: str, points: list[MapPoint]) -> str:
 
 - タイトル・凡例(legend)は表示しない。各toolは単一のレイヤーしか持たないため、レイヤー切り替えUIは不要
 - マウスホイールでの拡大縮小・ドラッグでの移動ができる(`geo.roam: true`、ECharts標準機能)
+- 初期表示は本州がほぼ収まるように`geo.center`/`geo.zoom`を固定する。離島(南鳥島・沖ノ鳥島など)まで自動フィット範囲に含めると本州が小さくなってしまうため
 - 地図上へのホバー時、県名ラベルの直接表示はしない(ツールチップのみ表示する)。`map`系列・`geo`コンポーネントの両方に`label.show: false`/`emphasis.label.show: false`が必要(`geoIndex`で`geo`に紐づく`map`系列は、ホバー時の描画を`geo`コンポーネント側が担うため)
+- ツールチップには「都道府県名　値」を表示する。系列に`name`を設定していないため、EChartsのデフォルト書式(`{a}`=系列名)だと意味不明な文字列が出てしまうので、`tooltip.formatter: "{b}　{c}"`(`{b}`=データ名, `{c}`=値)を系列ごとに明示する
 
 ### `render_choropleth`固有の振る舞い
 
