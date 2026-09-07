@@ -7,7 +7,11 @@ from strands.types.content import Message
 from strands.types.tools import ToolResult
 
 # HTML描画ツール名 → チャット表示用のブロック種別
-HTML_TOOL_BLOCK_TYPES = {"render_chart": "chart", "render_map": "map"}
+HTML_TOOL_BLOCK_TYPES = {
+    "render_chart": "chart",
+    "render_choropleth": "map",
+    "render_spider": "map",
+}
 
 
 class Block(BaseModel):
@@ -19,7 +23,7 @@ class Block(BaseModel):
 
 
 def messages_to_blocks(messages: list[Message]) -> list[Block]:
-    """assistantの発言とHTML描画ツール(render_chart/render_map)の結果を、発生順のブロック列に変換する。"""
+    """assistantの発言とHTML描画ツールの結果を、発生順のブロック列に変換する。"""
     block_types_by_tool_use_id: dict[str, str] = {}
     blocks: list[Block] = []
 

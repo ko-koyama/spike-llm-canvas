@@ -136,50 +136,57 @@ class MapPoint(BaseModel):
 
 
 @tool
-def render_map(
-    points: list[MapPoint],
-    origin: str | None = None,
-) -> str:
-    """都道府県単位の数値を地図上に塗り分け表示する。originを指定すると流動線も重ねて表示する。"""
-    # strandsは引数を生のdictで渡すため、Pydanticモデルへ明示的に変換する。
+def render_choropleth(points: list[MapPoint]) -> str:
+    """都道府県単位の数値を地図上に塗り分け表示する。"""
     points = [MapPoint.model_validate(p) for p in points]
-
-    if not points:
-        raise ValueError("pointsが空です")
-    for point in points:
-        if point.prefecture not in _PREFECTURE_POINTS:
-            raise ValueError(f"未知の都道府県名です: {point.prefecture}")
-    if origin is not None and origin not in _PREFECTURE_POINTS:
-        raise ValueError(f"未知の都道府県名です: {origin}")
+    _validate_map_points(points)
 
     values = [p.value for p in points if p.value is not None]
     value_min = min(values) if values else 0.0
     value_max = max(values) if values else 0.0
 
-    # geoコンポーネントを常に用意し、凡例で「塗り分け」系列を非表示にしても
-    # 地図の輪郭自体は残るようにする(originなし時に画面が真っ白になるのを防ぐ)
-    geo = {
-        "map": _MAP_NAME,
-        "roam": True,
-        "label": {"show": False},
-        "emphasis": {"label": {"show": False}},
-    }
-    map_series: dict = {
-        "name": "塗り分け",
-        "type": "map",
-        "map": _MAP_NAME,
-        "geoIndex": 0,
-        "data": [{"name": p.prefecture, "value": p.value} for p in points],
-        "label": {"show": False},
-        "emphasis": {"label": {"show": False}},
-    }
-    series = [map_series]
-
-    if origin is not None:
-        origin_coord = _PREFECTURE_POINTS[origin]
-        series.append(
+    option = {
+        "tooltip": {},
+        "visualMap": {
+            "show": False,
+            "min": value_min,
+            "max": value_max,
+            "inRange": {"color": ["#eef6ff", _DEFAULT_SERIES_COLORS[0]]},
+        },
+        "geo": _base_geo(),
+        "series": [
             {
-                "name": "流動線",
+                "type": "map",
+                "map": _MAP_NAME,
+                "geoIndex": 0,
+                "data": [{"name": p.prefecture, "value": p.value} for p in points],
+                "label": {"show": False},
+                "emphasis": {"label": {"show": False}},
+            }
+        ],
+    }
+
+    return _render_map_html(option)
+
+
+@tool
+def render_spider(origin: str, points: list[MapPoint]) -> str:
+    """起点となる都道府県から、各都道府県への流動線を地図上に描く。線の太さは値に比例する。"""
+    points = [MapPoint.model_validate(p) for p in points]
+    _validate_map_points(points)
+    if origin not in _PREFECTURE_POINTS:
+        raise ValueError(f"未知の都道府県名です: {origin}")
+
+    values = [p.value for p in points if p.value is not None]
+    value_min = min(values) if values else 0.0
+    value_max = max(values) if values else 0.0
+    origin_coord = _PREFECTURE_POINTS[origin]
+
+    option = {
+        "tooltip": {},
+        "geo": _base_geo(),
+        "series": [
+            {
                 "type": "lines",
                 "coordinateSystem": "geo",
                 "lineStyle": {
@@ -198,22 +205,33 @@ def render_map(
                     if p.prefecture != origin
                 ],
             }
-        )
-
-    option = {
-        "tooltip": {},
-        "legend": {"data": [s["name"] for s in series]},
-        "visualMap": {
-            "show": False,
-            "seriesIndex": 0,
-            "min": value_min,
-            "max": value_max,
-            "inRange": {"color": ["#eef6ff", _DEFAULT_SERIES_COLORS[0]]},
-        },
-        "geo": geo,
-        "series": series,
+        ],
     }
 
+    return _render_map_html(option)
+
+
+def _validate_map_points(points: list[MapPoint]) -> None:
+    """MapPointのリストが空でなく、すべて既知の都道府県名かを検証する。"""
+    if not points:
+        raise ValueError("pointsが空です")
+    for point in points:
+        if point.prefecture not in _PREFECTURE_POINTS:
+            raise ValueError(f"未知の都道府県名です: {point.prefecture}")
+
+
+def _base_geo() -> dict:
+    """都道府県地図のgeoコンポーネント設定(全ツール共通)。"""
+    return {
+        "map": _MAP_NAME,
+        "roam": True,
+        "label": {"show": False},
+        "emphasis": {"label": {"show": False}},
+    }
+
+
+def _render_map_html(option: dict) -> str:
+    """EChartsのoptionをmapテンプレートに埋め込みHTML文字列にする。"""
     html = _MAP_TEMPLATE.replace("{{prefectures_geojson}}", _PREFECTURES_GEOJSON)
     return html.replace("{{map_config}}", json.dumps(option))
 

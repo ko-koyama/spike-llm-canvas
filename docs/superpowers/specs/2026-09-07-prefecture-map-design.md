@@ -12,8 +12,9 @@
 **やること**
 
 - 都道府県単位のGeoJSONを用意し、値に応じた塗り分け(コロプレスマップ)を行う
-- 起点(`origin`)を指定した場合、そこから各都道府県への流動線(スパイダーマップ)を重ねて表示する
-- 既存の`render_chart`と同じ設計思想(Pydanticモデル + テンプレートHTML埋め込み)で`render_map`という1つのtoolとして実装する
+- 起点から各都道府県への流動線(スパイダーマップ)を描く
+- 既存の`render_chart`と同じ設計思想(Pydanticモデル + テンプレートHTML埋め込み)で、コロプレスマップとスパイダーマップは別のtool(`render_choropleth`/`render_spider`)として実装する
+  - 当初は`origin`の有無で1つのtool(`render_map`)内で分岐する設計にしていたが、値(`value`)が「塗り分けの濃淡」と「流動線の太さ」を兼用する結合が実装・調整を通じて不自然に感じられたため、2つのtoolに分離した
 
 **やらないこと(YAGNI、将来拡張候補)**
 
@@ -49,44 +50,51 @@
    - `-clean`: simplify後の不要頂点・ジオメトリ異常を除去
    - `precision=0.0001`: 出力座標の精度を丸めてファイルサイズを削減
 
-   **なぜサイズを詰めたか:** `render_map`の戻り値(GeoJSONを埋め込んだHTML)は、strandsのtool実行結果としてそのままLLMの会話履歴(`agent.messages`)に永続化され、以後のターンでも毎回送信され続ける。736KBのままだと1回の地図生成で約19〜21万トークンをLLM側に消費し、複数回地図を出すセッションではすぐにコンテキスト上限に達する。27KBまで削減することで1回あたり約7千トークンまで抑えられる。なお、この「tool結果が丸ごとLLMコンテキストに残る」という構造自体は解消しておらず、あくまで症状を実用範囲まで軽くする対応である(既知の制約を参照)。
+   **なぜサイズを詰めたか:** `render_choropleth`/`render_spider`の戻り値(GeoJSONを埋め込んだHTML)は、strandsのtool実行結果としてそのままLLMの会話履歴(`agent.messages`)に永続化され、以後のターンでも毎回送信され続ける。736KBのままだと1回の地図生成で約19〜21万トークンをLLM側に消費し、複数回地図を出すセッションではすぐにコンテキスト上限に達する。27KBまで削減することで1回あたり約7千トークンまで抑えられる。なお、この「tool結果が丸ごとLLMコンテキストに残る」という構造自体は解消しておらず、あくまで症状を実用範囲まで軽くする対応である(既知の制約を参照)。
 3. 同じ元データから、都道府県名→代表点(緯度経度)の対応表 `backend/data/prefecture_points.json` を作成する
    - スパイダーマップの起点・終点座標に使う代表点(県庁所在地など)であり、ポリゴンの重心ではなく実際の都市座標を使う(参考実装と同じ考え方)
    - これにより実行時にshapelyなどの幾何ライブラリを追加する必要がなくなる
-   - このJSONのキー(47都道府県名)が、`render_map`への入力バリデーションの正解データにもなる
+   - このJSONのキー(47都道府県名)が、`render_choropleth`/`render_spider`への入力バリデーションの正解データにもなる
 4. 前処理の手順は`scripts/`配下にドキュメント化する(スクリプト化は実装時に判断)
 
 **決定事項:** 加工後の`japan_prefectures.geojson`は26,784 bytes(約26KB)となり、リポジトリにコミット済み。当初は752,860 bytes(約735KB)だったが、LLMの会話履歴に毎回乗ってしまう問題(下記「既知の制約」参照)を軽減するため、2段目のsimplifyを追加して縮小した。
 
 ## tool設計
 
-`render_chart`と同じ構造(Pydanticモデル + `@tool`関数)で、`render_map`という新規toolを追加する。
+`render_chart`と同じ構造(Pydanticモデル + `@tool`関数)で、`render_choropleth`・`render_spider`という2つの新規toolを追加する。都道府県名のPydanticモデルは共通化する。
 
 ```python
 class MapPoint(BaseModel):
     """地図上の1地点(都道府県名で指定)。"""
 
     prefecture: str  # 都道府県名(例: "東京都")。47都道府県のリストと照合する
-    value: float | None = None  # 塗り分けの濃淡、および流動線の太さに使う数値
+    value: float | None = None  # 塗り分けの濃淡、または流動線の太さに使う数値
 
 
 @tool
-def render_map(
-    points: list[MapPoint],
-    origin: str | None = None,  # 指定すると、originから各pointへの流動線レイヤーを重ねて表示する
-) -> str:
-    """都道府県単位の数値を地図上に塗り分け表示する。originを指定すると流動線も重ねて表示する。"""
+def render_choropleth(points: list[MapPoint]) -> str:
+    """都道府県単位の数値を地図上に塗り分け表示する。"""
+
+
+@tool
+def render_spider(origin: str, points: list[MapPoint]) -> str:
+    """起点となる都道府県から、各都道府県への流動線を地図上に描く。線の太さは値に比例する。"""
 ```
 
-### 振る舞い
+### 振る舞い(共通)
 
-- `origin`未指定 → 塗り分け(コロプレス)のみのシンプルな地図
-- `origin`指定 → 塗り分け + 流動線(スパイダー)を1枚のEChartsマップに重ねて表示
-  - `origin`から各`points`への線を引き、`value`が大きいほど線を太くする(線幅はmin-max線形補間、参考実装の`wScale`と同等の計算をPython側で行う)
-- 色分け(コロプレス)は自前でスケール計算せず、EChartsの`visualMap`コンポーネント(値→色の連続グラデーション)に任せる。ただし色分けの尺度バー(グラデーションの凡例UI)自体は表示しない(`visualMap.show: false`)。地図が主役であり、数値の目盛りは不要という方針のため
-- タイトルは表示しない(地図が主役のため、`render_chart`のような`title`引数は持たない)
-- 塗り分け・流動線の両レイヤーの表示/非表示切り替えは、ECharts標準の凡例(legend)クリックで行う(カスタムJS・チェックボックスUIは実装しない)
+- タイトル・凡例(legend)は表示しない。各toolは単一のレイヤーしか持たないため、レイヤー切り替えUIは不要
 - マウスホイールでの拡大縮小・ドラッグでの移動ができる(`geo.roam: true`、ECharts標準機能)
+- 地図上へのホバー時、県名ラベルの直接表示はしない(ツールチップのみ表示する)。`map`系列・`geo`コンポーネントの両方に`label.show: false`/`emphasis.label.show: false`が必要(`geoIndex`で`geo`に紐づく`map`系列は、ホバー時の描画を`geo`コンポーネント側が担うため)
+
+### `render_choropleth`固有の振る舞い
+
+- 色分けは自前でスケール計算せず、EChartsの`visualMap`コンポーネント(値→色の連続グラデーション)に任せる。ただし色分けの尺度バー(グラデーションの凡例UI)自体は表示しない(`visualMap.show: false`)
+
+### `render_spider`固有の振る舞い
+
+- `origin`から各`points`への線を引き、`value`が大きいほど線を太くする(線幅はmin-max線形補間、参考実装の`wScale`と同等の計算をPython側で行う)
+- `points`に`origin`と同じ都道府県が含まれる場合、その地点への線(長さ0の自己参照線)は描かない
 
 ### バリデーション
 
@@ -98,12 +106,12 @@ def render_map(
 - `backend/data/japan_prefectures.geojson` — 前処理済み都道府県ポリゴン(dissolve+simplify済み)。26,784 bytes(約26KB)でコミット済み(データパイプライン節を参照)
 - `backend/data/prefecture_points.json` — 47都道府県名→代表点(緯度経度)の対応表
 - `backend/templates/map.html` — `chart.html`と同構成の新規テンプレート。ECharts CDN読み込み + `{{map_config}}`(EChartsのoption)と`{{prefectures_geojson}}`(GeoJSON文字列)をプレースホルダ置換
-- `backend/tools.py` — `MapPoint`モデルと`render_map`関数を追加。geojson/pointsのJSONはモジュールロード時に1回だけ読み込む(`_CHART_TEMPLATE`と同じパターン)
-- `backend/blocks.py` — HTML化されるtool名の判定を`"render_chart"`固定から`{"render_chart", "render_map"}`のような集合に一般化する。`Block.type`は既存の`"chart"`をそのまま流用し、フロントエンド(`App.tsx`)は変更不要
-- `backend/main.py` — `Agent(tools=[render_chart, render_map])`に追加
+- `backend/tools.py` — `MapPoint`モデルと`render_choropleth`・`render_spider`関数を追加。都道府県名検証・geoコンポーネント設定・HTML生成はヘルパー関数(`_validate_map_points`・`_base_geo`・`_render_map_html`)として共通化する。geojson/pointsのJSONはモジュールロード時に1回だけ読み込む(`_CHART_TEMPLATE`と同じパターン)
+- `backend/blocks.py` — HTML化されるtool名の判定を、tool名→ブロック種別の対応表(`{"render_chart": "chart", "render_choropleth": "map", "render_spider": "map"}`)に一般化する。`Block.type`に`"map"`を追加し、フロントエンドでは地図を大きめの表示サイズにする(`frontend/src/index.css`の`.map`)
+- `backend/main.py` — `Agent(tools=[render_chart, render_choropleth, render_spider])`に追加
 
 ## 既知の制約(今回は対応しない)
 
-- `render_map`のtool結果(GeoJSONを埋め込んだHTML)は、strandsの仕組み上そのままLLMの会話履歴(`agent.messages`)に永続化され、以後のターンでも毎回LLMに送信され続ける。GeoJSONを26KBまで軽量化したことで1回あたり約7千トークン程度に抑えているが、構造自体(tool結果が丸ごと履歴に残る)は解消していない。地図を何度も出すセッションでは少しずつ積み重なる点は注意
+- `render_choropleth`/`render_spider`のtool結果(GeoJSONを埋め込んだHTML)は、strandsの仕組み上そのままLLMの会話履歴(`agent.messages`)に永続化され、以後のターンでも毎回LLMに送信され続ける。GeoJSONを26KBまで軽量化したことで1回あたり約7千トークン程度に抑えているが、構造自体(tool結果が丸ごと履歴に残る)は解消していない。地図を何度も出すセッションでは少しずつ積み重なる点は注意
 - 上記と同じ理由で、応答のHTMLサイズ自体も地図を出すたびに大きくなる(フロントエンドのiframe表示にも影響)。キャッシュ/別配信(例: GeoJSONを静的ファイルとして配信し、tool結果には埋め込まない)は必要になった時点で検討する
 - 市区町村レベル、複数起点のスパイダーマップは将来拡張として見送る
