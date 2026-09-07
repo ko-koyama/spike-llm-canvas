@@ -8,6 +8,13 @@ from pydantic import BaseModel, Field
 from strands import tool
 
 _CHART_TEMPLATE = (Path(__file__).parent / "templates" / "chart.html").read_text()
+_MAP_TEMPLATE = (Path(__file__).parent / "templates" / "map_d3.html").read_text()
+_PREFECTURES_GEOJSON = (
+    Path(__file__).parent / "data" / "japan_prefectures.geojson"
+).read_text()
+_PREFECTURE_POINTS: dict[str, list[float]] = json.loads(
+    (Path(__file__).parent / "data" / "prefecture_points.json").read_text()
+)
 
 # 系列カラー未指定時のデフォルト配色
 _DEFAULT_SERIES_COLORS = [
@@ -116,3 +123,67 @@ def render_chart(
     }
 
     return _CHART_TEMPLATE.replace("{{chart_config}}", json.dumps(config))
+
+
+class MapPoint(BaseModel):
+    """地図上の1地点(都道府県名で指定)。"""
+
+    prefecture: str  # 都道府県名(例: "東京都")。47都道府県の名称と完全一致させる
+    value: float | None = None  # 塗り分けの濃淡、および流動線の太さに使う数値
+
+
+@tool
+def render_choropleth(points: list[MapPoint]) -> str:
+    """都道府県単位の数値を地図上に塗り分け表示する。"""
+    points = [MapPoint.model_validate(p) for p in points]
+    _validate_map_points(points)
+
+    return _render_map_html(mode="choropleth", points=points)
+
+
+@tool
+def render_spider(origin: str, points: list[MapPoint]) -> str:
+    """起点となる都道府県から、各都道府県への流動線を地図上に描く。線の太さは値に比例する。"""
+    points = [MapPoint.model_validate(p) for p in points]
+    _validate_map_points(points)
+    if origin not in _PREFECTURE_POINTS:
+        raise ValueError(f"未知の都道府県名です: {origin}")
+
+    dest_points = [p for p in points if p.prefecture != origin]
+    return _render_map_html(mode="spider", points=dest_points, origin=origin)
+
+
+def _validate_map_points(points: list[MapPoint]) -> None:
+    """MapPointのリストが空でなく、すべて既知の都道府県名かを検証する。"""
+    if not points:
+        raise ValueError("pointsが空です")
+    for point in points:
+        if point.prefecture not in _PREFECTURE_POINTS:
+            raise ValueError(f"未知の都道府県名です: {point.prefecture}")
+
+
+def _render_map_html(
+    mode: Literal["choropleth", "spider"],
+    points: list[MapPoint],
+    origin: str | None = None,
+) -> str:
+    """地図描画用の設定をD3のmapテンプレートに埋め込みHTML文字列にする。"""
+    values = [p.value for p in points if p.value is not None]
+    config = {
+        "mode": mode,
+        "points": [
+            {
+                "name": p.prefecture,
+                "value": p.value,
+                "lon": _PREFECTURE_POINTS[p.prefecture][0],
+                "lat": _PREFECTURE_POINTS[p.prefecture][1],
+            }
+            for p in points
+        ],
+        "origin": _PREFECTURE_POINTS[origin] if origin else None,
+        "valueMin": min(values) if values else 0.0,
+        "valueMax": max(values) if values else 0.0,
+    }
+
+    html = _MAP_TEMPLATE.replace("{{prefectures_geojson}}", _PREFECTURES_GEOJSON)
+    return html.replace("{{map_config}}", json.dumps(config))

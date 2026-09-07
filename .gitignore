@@ -1,6 +1,7 @@
 # 全般
 .venv
 .worktrees/
+.superpowers/
 
 # Python
 __pycache__/

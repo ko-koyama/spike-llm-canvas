@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from strands import Agent
 
 from blocks import Block, messages_to_blocks
-from tools import render_chart
+from tools import render_chart, render_choropleth, render_spider
 
 # 会話履歴は永続化せず、プロセスが生きている間だけメモリ上に保持する。
 AGENTS: dict[str, Agent] = {}
@@ -31,7 +31,9 @@ def healthz() -> dict[str, str]:
 
 @app.post("/api/chat")
 async def chat(req: ChatRequest) -> ChatResponse:
-    agent = AGENTS.setdefault(req.session_id, Agent(tools=[render_chart]))
+    agent = AGENTS.setdefault(
+        req.session_id, Agent(tools=[render_chart, render_choropleth, render_spider])
+    )
     messages_before = len(agent.messages)
     await agent.invoke_async(req.message)
     new_messages = agent.messages[messages_before:]
