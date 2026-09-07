@@ -37,7 +37,7 @@ class ChartSeries(BaseModel):
         default=None,
         description="ユーザーが明示的に色を指定した場合のみ設定すること。指定がなければデフォルト配色が使われる。",
     )
-    values: list[float] | None = None
+    values: list[float | None] | None = None
     points: list[ChartPoint] | None = None
 
 
