@@ -50,7 +50,7 @@ class ChartAxis(BaseModel):
 
 @tool
 def render_chart(
-    style: Literal["line", "bar", "scatter"],
+    style: Literal["line", "bar", "scatter", "pie"],
     series: list[ChartSeries],
     title: str | None = None,
     x_axis: ChartAxis | None = None,
@@ -69,7 +69,16 @@ def render_chart(
             data = [{"x": p.x, "y": p.y} for p in (s.points or [])]
         else:
             data = s.values or []
-        color = s.color or _DEFAULT_SERIES_COLORS[i % len(_DEFAULT_SERIES_COLORS)]
+
+        if style == "pie":
+            # 円グラフはスライスごとに色分けするため、要素ごとに配色を割り当てる
+            color = [
+                s.color or _DEFAULT_SERIES_COLORS[j % len(_DEFAULT_SERIES_COLORS)]
+                for j in range(len(data))
+            ]
+        else:
+            color = s.color or _DEFAULT_SERIES_COLORS[i % len(_DEFAULT_SERIES_COLORS)]
+
         datasets.append(
             {
                 "label": s.name,
