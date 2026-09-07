@@ -160,7 +160,7 @@ def render_map(
     # 地図の輪郭自体は残るようにする(originなし時に画面が真っ白になるのを防ぐ)
     geo = {
         "map": _MAP_NAME,
-        "roam": False,
+        "roam": True,
         "label": {"show": False},
         "emphasis": {"label": {"show": False}},
     }
