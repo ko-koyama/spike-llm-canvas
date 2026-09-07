@@ -1,0 +1,19 @@
+<html>
+  <head>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5"></script>
+    <style>
+      html, body, #map {
+        margin: 0;
+        height: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="map"></div>
+    <script>
+      echarts.registerMap('japan-prefectures', {{prefectures_geojson}});
+      const chart = echarts.init(document.getElementById('map'));
+      chart.setOption({{map_config}});
+    </script>
+  </body>
+</html>
