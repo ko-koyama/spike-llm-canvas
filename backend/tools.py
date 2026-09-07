@@ -88,27 +88,31 @@ def render_chart(
             }
         )
 
+    options = {
+        "maintainAspectRatio": False,
+        "plugins": {"title": {"display": bool(title), "text": title}},
+    }
+    if style != "pie":
+        # 円グラフには直交座標軸が存在しないため、scalesはpie以外にのみ付与する
+        options["scales"] = {
+            "x": {
+                "title": {
+                    "display": bool(x_axis and x_axis.title),
+                    "text": x_axis.title if x_axis else None,
+                }
+            },
+            "y": {
+                "title": {
+                    "display": bool(y_axis and y_axis.title),
+                    "text": y_axis.title if y_axis else None,
+                }
+            },
+        }
+
     config = {
         "type": style,
         "data": {"labels": labels, "datasets": datasets},
-        "options": {
-            "maintainAspectRatio": False,
-            "plugins": {"title": {"display": bool(title), "text": title}},
-            "scales": {
-                "x": {
-                    "title": {
-                        "display": bool(x_axis and x_axis.title),
-                        "text": x_axis.title if x_axis else None,
-                    }
-                },
-                "y": {
-                    "title": {
-                        "display": bool(y_axis and y_axis.title),
-                        "text": y_axis.title if y_axis else None,
-                    }
-                },
-            },
-        },
+        "options": options,
     }
 
     return _CHART_TEMPLATE.replace("{{chart_config}}", json.dumps(config))
