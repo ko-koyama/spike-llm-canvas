@@ -25,7 +25,10 @@
 
 ## データパイプライン(ビルド時の前処理、実行時には関与しない)
 
-1. MLIT国土数値情報から N03(行政区域, shapefile)をダウンロード(手動、更新頻度は低い想定)
+1. MLIT国土数値情報から N03(行政区域, shapefile)をダウンロードする
+   - 一次ソースから直接取得する(GitHub等のミラー・加工済みデータは使わない)
+   - 例: `https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2026/N03-20260101_GML.zip`(令和8年/2026年1月1日時点、全国、約803MB。年ごとにファイル名末尾の日付を変えて配布されており、最新版を使う)
+   - 生のshapefile/zipはリポジトリにコミットしない
 2. mapshaperで都道府県単位に統合・軽量化する
 
    ```
@@ -42,6 +45,8 @@
    - これにより実行時にshapelyなどの幾何ライブラリを追加する必要がなくなる
    - このJSONのキー(47都道府県名)が、`render_map`への入力バリデーションの正解データにもなる
 4. 前処理の手順は`scripts/`配下にドキュメント化する(スクリプト化は実装時に判断)
+
+**保留事項:** 加工後の`japan_prefectures.geojson`はサイズが大きくなる可能性があり(都道府県単位まで簡略化しても数百KB〜規模を想定)、リポジトリにコミットするか、`.gitignore`対象にして前処理スクリプトから都度生成する運用にするかは未確定。実装時にファイルサイズの実測値を見てから判断する。
 
 ## tool設計
 
@@ -79,7 +84,7 @@ def render_map(
 
 ## 実装構成
 
-- `backend/data/japan_prefectures.geojson` — 前処理済み都道府県ポリゴン(dissolve+simplify済み)
+- `backend/data/japan_prefectures.geojson` — 前処理済み都道府県ポリゴン(dissolve+simplify済み)。コミットするか生成物として扱うかは保留(データパイプライン節を参照)
 - `backend/data/prefecture_points.json` — 47都道府県名→代表点(緯度経度)の対応表
 - `backend/templates/map.html` — `chart.html`と同構成の新規テンプレート。ECharts CDN読み込み + `{{map_config}}`(EChartsのoption)と`{{prefectures_geojson}}`(GeoJSON文字列)をプレースホルダ置換
 - `backend/tools.py` — `MapPoint`モデルと`render_map`関数を追加。geojson/pointsのJSONはモジュールロード時に1回だけ読み込む(`_CHART_TEMPLATE`と同じパターン)
