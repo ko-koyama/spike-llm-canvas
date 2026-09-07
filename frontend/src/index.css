@@ -93,6 +93,17 @@ body {
   background: #fff;
 }
 
+/* 地図は情報量が多いため、グラフより大きめの表示領域にする */
+.map {
+  display: block;
+  width: 640px;
+  max-width: 100%;
+  height: 480px;
+  border: none;
+  border-radius: 0.5rem;
+  background: #fff;
+}
+
 .error {
   color: #d33;
   font-size: 0.9rem;
