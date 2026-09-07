@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-type Block = { type: 'text'; text: string } | { type: 'chart'; html: string }
+type Block = { type: 'text'; text: string } | { type: 'chart'; html: string } | { type: 'map'; html: string }
 
 type Message = {
   id: string
@@ -51,9 +51,9 @@ export default function App() {
         {messages.map((m) => (
           <div key={m.id} className={`turn ${m.role}`}>
             {m.blocks.map((b, i) =>
-              b.type === 'chart' ? (
+              b.type === 'chart' || b.type === 'map' ? (
                 <div key={i} className="chart-panel">
-                  <iframe className="chart" srcDoc={b.html} sandbox="allow-scripts" />
+                  <iframe className={b.type} srcDoc={b.html} sandbox="allow-scripts" />
                 </div>
               ) : (
                 <div key={i} className={`msg ${m.role}`}>
