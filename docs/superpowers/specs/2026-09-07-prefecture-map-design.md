@@ -37,6 +37,7 @@
      -dissolve2 fields=N03_001 \
      -rename-fields name=N03_001 \
      -simplify dp 0.3% keep-shapes \
+     -simplify dp 2% keep-shapes \
      -clean \
      -o format=geojson precision=0.0001 backend/data/japan_prefectures.geojson
    ```
@@ -44,16 +45,18 @@
    - `-proj wgs84`: 座標系をWGS84(緯度経度)に統一
    - `-dissolve2`: 市区町村ポリゴンを都道府県単位に統合
    - `-rename-fields`: 属性名`N03_001`(都道府県名)を`name`に変更
-   - `-simplify ... keep-shapes`: 小さい県(香川など)や離島が消えないよう保護しつつ軽量化(実測を踏まえ0.3%を採用)
+   - `-simplify ... keep-shapes`(2段): 小さい県(香川など)や離島が消えないよう保護しつつ軽量化。simplifyは現在の点数に対する相対的な割合で効くため、同じ値を1回で適用するより2段に分けた方が大きく軽量化できる(実測: 1段目のみで736KB、2段目を追加して27KB。都道府県の輪郭は目視で崩れないことを確認済み)
    - `-clean`: simplify後の不要頂点・ジオメトリ異常を除去
    - `precision=0.0001`: 出力座標の精度を丸めてファイルサイズを削減
+
+   **なぜサイズを詰めたか:** `render_map`の戻り値(GeoJSONを埋め込んだHTML)は、strandsのtool実行結果としてそのままLLMの会話履歴(`agent.messages`)に永続化され、以後のターンでも毎回送信され続ける。736KBのままだと1回の地図生成で約19〜21万トークンをLLM側に消費し、複数回地図を出すセッションではすぐにコンテキスト上限に達する。27KBまで削減することで1回あたり約7千トークンまで抑えられる。なお、この「tool結果が丸ごとLLMコンテキストに残る」という構造自体は解消しておらず、あくまで症状を実用範囲まで軽くする対応である(既知の制約を参照)。
 3. 同じ元データから、都道府県名→代表点(緯度経度)の対応表 `backend/data/prefecture_points.json` を作成する
    - スパイダーマップの起点・終点座標に使う代表点(県庁所在地など)であり、ポリゴンの重心ではなく実際の都市座標を使う(参考実装と同じ考え方)
    - これにより実行時にshapelyなどの幾何ライブラリを追加する必要がなくなる
    - このJSONのキー(47都道府県名)が、`render_map`への入力バリデーションの正解データにもなる
 4. 前処理の手順は`scripts/`配下にドキュメント化する(スクリプト化は実装時に判断)
 
-**決定事項:** 加工後の`japan_prefectures.geojson`は752,860 bytes(約735KB)となり、1MB未満に収まったためリポジトリにコミット済み。
+**決定事項:** 加工後の`japan_prefectures.geojson`は26,784 bytes(約26KB)となり、リポジトリにコミット済み。当初は752,860 bytes(約735KB)だったが、LLMの会話履歴に毎回乗ってしまう問題(下記「既知の制約」参照)を軽減するため、2段目のsimplifyを追加して縮小した。
 
 ## tool設計
 
@@ -91,7 +94,7 @@ def render_map(
 
 ## 実装構成
 
-- `backend/data/japan_prefectures.geojson` — 前処理済み都道府県ポリゴン(dissolve+simplify済み)。752,860 bytes(約735KB)でコミット済み(データパイプライン節を参照)
+- `backend/data/japan_prefectures.geojson` — 前処理済み都道府県ポリゴン(dissolve+simplify済み)。26,784 bytes(約26KB)でコミット済み(データパイプライン節を参照)
 - `backend/data/prefecture_points.json` — 47都道府県名→代表点(緯度経度)の対応表
 - `backend/templates/map.html` — `chart.html`と同構成の新規テンプレート。ECharts CDN読み込み + `{{map_config}}`(EChartsのoption)と`{{prefectures_geojson}}`(GeoJSON文字列)をプレースホルダ置換
 - `backend/tools.py` — `MapPoint`モデルと`render_map`関数を追加。geojson/pointsのJSONはモジュールロード時に1回だけ読み込む(`_CHART_TEMPLATE`と同じパターン)
@@ -100,5 +103,6 @@ def render_map(
 
 ## 既知の制約(今回は対応しない)
 
-- GeoJSONを応答ごとに毎回埋め込むため、地図を出すたびにHTMLサイズが増える(概算で数百KB程度を想定)。キャッシュ/別配信は必要になった時点で検討する
+- `render_map`のtool結果(GeoJSONを埋め込んだHTML)は、strandsの仕組み上そのままLLMの会話履歴(`agent.messages`)に永続化され、以後のターンでも毎回LLMに送信され続ける。GeoJSONを26KBまで軽量化したことで1回あたり約7千トークン程度に抑えているが、構造自体(tool結果が丸ごと履歴に残る)は解消していない。地図を何度も出すセッションでは少しずつ積み重なる点は注意
+- 上記と同じ理由で、応答のHTMLサイズ自体も地図を出すたびに大きくなる(フロントエンドのiframe表示にも影響)。キャッシュ/別配信(例: GeoJSONを静的ファイルとして配信し、tool結果には埋め込まない)は必要になった時点で検討する
 - 市区町村レベル、複数起点のスパイダーマップは将来拡張として見送る

@@ -31,6 +31,7 @@ npx --yes mapshaper "$SHP" \
   -dissolve2 fields=N03_001 \
   -rename-fields name=N03_001 \
   -simplify dp 0.3% keep-shapes \
+  -simplify dp 2% keep-shapes \
   -clean \
   -o format=geojson precision=0.0001 "$OUT_FILE"
 
