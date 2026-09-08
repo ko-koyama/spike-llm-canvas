@@ -42,7 +42,8 @@ def messages_to_blocks(messages: list[Message]) -> list[Block]:
                 name = content["toolUse"]["name"]
                 block_type = HTML_TOOL_BLOCK_TYPES.get(name)
                 if block_type:
-                    variant = FIXED_VARIANTS.get(name) or content["toolUse"]["input"].get("style")
+                    tool_input = content["toolUse"]["input"]
+                    variant = FIXED_VARIANTS.get(name) or tool_input.get("style")
                     tool_info_by_id[tool_use_id] = (block_type, variant)
             elif "toolResult" in content:
                 tool_use_id = content["toolResult"]["toolUseId"]
@@ -51,7 +52,8 @@ def messages_to_blocks(messages: list[Message]) -> list[Block]:
                     block_type, variant = info
                     html = _extract_text(content["toolResult"])
                     if html:
-                        blocks.append(Block(type=block_type, variant=variant, html=html))
+                        block = Block(type=block_type, variant=variant, html=html)
+                        blocks.append(block)
             elif "text" in content and message["role"] == "assistant":
                 if content["text"]:
                     blocks.append(Block(type="text", text=content["text"]))
