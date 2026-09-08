@@ -148,58 +148,49 @@ body {
 
 .canvas-panel-header {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  align-items: stretch;
   gap: 0.5rem;
-  padding: 0.6rem 0.75rem;
   border-bottom: 1px solid color-mix(in srgb, currentColor 20%, transparent);
 }
 
-.canvas-panel-nav {
+/* ファイルタブ風の履歴切り替え。visualizationが増えると横スクロールする */
+.canvas-panel-tabs {
   display: flex;
-  align-items: center;
-  gap: 0.4rem;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
 }
 
-.canvas-panel-nav select {
+.canvas-panel-tab {
+  flex: 0 0 auto;
   font: inherit;
-  padding: 0.3rem 0.6rem;
-  border-radius: 0.5rem;
-  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
-  background: var(--bubble-bg);
-  color: inherit;
+  padding: 0.6rem 0.9rem;
+  border: none;
+  border-right: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: color-mix(in srgb, currentColor 65%, transparent);
+  white-space: nowrap;
   cursor: pointer;
 }
 
-.canvas-panel-nav button {
-  font: inherit;
+.canvas-panel-tab:hover {
+  background: color-mix(in srgb, currentColor 6%, transparent);
+}
+
+.canvas-panel-tab.active {
+  background: var(--bubble-bg);
+  border-bottom-color: var(--accent);
+  color: inherit;
   font-weight: 600;
-  padding: 0.4rem 0.8rem;
-  border-radius: 0.5rem;
-  border: 1px solid var(--accent);
-  background: var(--bubble-bg);
-  color: var(--accent);
-  box-shadow: var(--shadow);
-  cursor: pointer;
-}
-
-.canvas-panel-nav button:hover:not(:disabled) {
-  background: var(--accent);
-  color: #fff;
-}
-
-.canvas-panel-nav button:disabled {
-  opacity: 0.4;
-  border-color: color-mix(in srgb, currentColor 25%, transparent);
-  color: inherit;
-  box-shadow: none;
-  cursor: default;
 }
 
 .canvas-panel-actions {
   display: flex;
   align-items: center;
+  flex: 0 0 auto;
   gap: 0.4rem;
+  padding: 0.5rem 0.75rem;
 }
 
 .canvas-panel-download {

@@ -188,28 +188,17 @@ function CanvasPanel({
   return (
     <div className="canvas-panel">
       <div className="canvas-panel-header">
-        <div className="canvas-panel-nav">
-          <button
-            type="button"
-            disabled={activeIndex <= 0}
-            onClick={() => onSelect(visualizations[activeIndex - 1].id)}
-          >
-            ← 前へ
-          </button>
-          <select value={activeIndex} onChange={(e) => onSelect(visualizations[Number(e.target.value)].id)}>
-            {visualizations.map((v, i) => (
-              <option key={v.id} value={i}>
-                {i + 1}. {vizLabel(v)}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            disabled={activeIndex >= visualizations.length - 1}
-            onClick={() => onSelect(visualizations[activeIndex + 1].id)}
-          >
-            次へ →
-          </button>
+        <div className="canvas-panel-tabs">
+          {visualizations.map((v, i) => (
+            <button
+              key={v.id}
+              type="button"
+              className={`canvas-panel-tab${v.id === activeViz.id ? ' active' : ''}`}
+              onClick={() => onSelect(v.id)}
+            >
+              {i + 1}. {vizLabel(v)}
+            </button>
+          ))}
         </div>
         <div className="canvas-panel-actions">
           <button type="button" className="canvas-panel-download" onClick={() => downloadViz(activeViz, activeIndex)}>
