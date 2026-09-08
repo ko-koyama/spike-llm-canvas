@@ -136,7 +136,7 @@ body {
   cursor: default;
 }
 
-/* 右ペイン: 選択中の可視化を表示するキャンバス */
+/* 右ペイン: 選択中の可視化を表示するキャンバス。開くときは右からスライドインさせる */
 .canvas-panel {
   display: flex;
   flex-direction: column;
@@ -144,6 +144,18 @@ body {
   min-width: 360px;
   border-left: 1px solid color-mix(in srgb, currentColor 20%, transparent);
   background: var(--panel-bg);
+  animation: canvas-panel-enter 0.75s ease-out;
+}
+
+@keyframes canvas-panel-enter {
+  from {
+    transform: translateX(32px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
 }
 
 .canvas-panel-header {
