@@ -211,13 +211,29 @@ function CanvasPanel({
             次へ →
           </button>
         </div>
-        <button type="button" className="canvas-panel-close" onClick={onClose}>
-          ×
-        </button>
+        <div className="canvas-panel-actions">
+          <button type="button" className="canvas-panel-download" onClick={() => downloadViz(activeViz, activeIndex)}>
+            ⬇ ダウンロード
+          </button>
+          <button type="button" className="canvas-panel-close" onClick={onClose}>
+            ×
+          </button>
+        </div>
       </div>
       <div className="canvas-panel-body">
         <iframe className="canvas-frame" srcDoc={activeViz.html} sandbox="allow-scripts" />
       </div>
     </div>
   )
+}
+
+// 選択中の可視化のHTMLをファイルとしてダウンロードさせる
+function downloadViz(viz: Visualization, index: number) {
+  const blob = new Blob([viz.html], { type: 'text/html' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${index + 1}_${vizLabel(viz)}.html`
+  a.click()
+  URL.revokeObjectURL(url)
 }

@@ -196,16 +196,40 @@ body {
   cursor: default;
 }
 
+.canvas-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.canvas-panel-download {
+  font: inherit;
+  padding: 0.4rem 0.7rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--accent);
+  background: var(--bubble-bg);
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.canvas-panel-download:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
 .canvas-panel-close {
   font: inherit;
-  font-size: 1.1rem;
   line-height: 1;
-  padding: 0.3rem 0.6rem;
-  border: none;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid transparent;
   border-radius: 0.5rem;
   background: transparent;
   color: inherit;
   cursor: pointer;
+}
+
+.canvas-panel-close:hover {
+  background: color-mix(in srgb, currentColor 12%, transparent);
 }
 
 .canvas-panel-body {
