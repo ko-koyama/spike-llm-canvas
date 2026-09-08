@@ -13,34 +13,47 @@ HTML_TOOL_BLOCK_TYPES = {
     "render_spider": "map",
 }
 
+# ツール名から一意に種別ラベルが決まるもの。render_chartのみ引数のstyleに依存する
+FIXED_VARIANTS = {
+    "render_choropleth": "choropleth",
+    "render_spider": "spider",
+}
+
 
 class Block(BaseModel):
     """チャット表示用の1ブロック(テキストまたはツール結果のHTML)。"""
 
     type: Literal["text", "chart", "map"]
+    # チャート種別(bar/line/scatter/pie)や地図種別(choropleth/spider)の詳細ラベル
+    variant: str | None = None
     text: str | None = None
     html: str | None = None
 
 
 def messages_to_blocks(messages: list[Message]) -> list[Block]:
     """assistantの発言とHTML描画ツールの結果を、発生順のブロック列に変換する。"""
-    block_types_by_tool_use_id: dict[str, str] = {}
+    tool_info_by_id: dict[str, tuple[str, str | None]] = {}
     blocks: list[Block] = []
 
     for message in messages:
         for content in message["content"]:
             if "toolUse" in content:
                 tool_use_id = content["toolUse"]["toolUseId"]
-                block_type = HTML_TOOL_BLOCK_TYPES.get(content["toolUse"]["name"])
+                name = content["toolUse"]["name"]
+                block_type = HTML_TOOL_BLOCK_TYPES.get(name)
                 if block_type:
-                    block_types_by_tool_use_id[tool_use_id] = block_type
+                    tool_input = content["toolUse"]["input"]
+                    variant = FIXED_VARIANTS.get(name) or tool_input.get("style")
+                    tool_info_by_id[tool_use_id] = (block_type, variant)
             elif "toolResult" in content:
                 tool_use_id = content["toolResult"]["toolUseId"]
-                block_type = block_types_by_tool_use_id.get(tool_use_id)
-                if block_type:
+                info = tool_info_by_id.get(tool_use_id)
+                if info:
+                    block_type, variant = info
                     html = _extract_text(content["toolResult"])
                     if html:
-                        blocks.append(Block(type=block_type, html=html))
+                        block = Block(type=block_type, variant=variant, html=html)
+                        blocks.append(block)
             elif "text" in content and message["role"] == "assistant":
                 if content["text"]:
                     blocks.append(Block(type="text", text=content["text"]))
