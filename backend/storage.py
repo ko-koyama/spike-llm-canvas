@@ -28,12 +28,16 @@ _s3 = boto3.client(
 def upload_html(html: str) -> str:
     """HTMLをS3にアップロードし、オブジェクトキーを返す。"""
     key = f"viz/{uuid.uuid4()}.html"
-    _s3.put_object(
-        Bucket=_BUCKET,
-        Key=key,
-        Body=html.encode("utf-8"),
-        ContentType="text/html; charset=utf-8",
-    )
+    try:
+        _s3.put_object(
+            Bucket=_BUCKET,
+            Key=key,
+            Body=html.encode("utf-8"),
+            ContentType="text/html; charset=utf-8",
+        )
+    except Exception as e:
+        # AWSのエラー詳細(バケット名など内部情報)をLLM/ユーザーに渡さないよう汎用メッセージに変換する
+        raise ValueError("データの可視化に失敗しました") from e
     return key
 
 
