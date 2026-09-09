@@ -32,7 +32,7 @@ def upload_html(html: str) -> str:
         Bucket=_BUCKET,
         Key=key,
         Body=html.encode("utf-8"),
-        ContentType="text/html",
+        ContentType="text/html; charset=utf-8",
     )
     return key
 
