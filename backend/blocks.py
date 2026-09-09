@@ -8,8 +8,8 @@ from strands.types.tools import ToolResult
 
 from storage import presign
 
-# HTML描画ツール名 → チャット表示用のブロック種別
-HTML_TOOL_BLOCK_TYPES = {
+# 可視化ツール名 → チャット表示用のブロック種別
+RENDER_TOOL_BLOCK_TYPES = {
     "render_chart": "chart",
     "render_choropleth": "map",
     "render_spider": "map",
@@ -33,7 +33,7 @@ class Block(BaseModel):
 
 
 def messages_to_blocks(messages: list[Message]) -> list[Block]:
-    """assistantの発言とHTML描画ツールの結果を、発生順のブロック列に変換する。"""
+    """assistantの発言と可視化ツールの結果を、発生順のブロック列に変換する。"""
     tool_info_by_id: dict[str, tuple[str, str | None]] = {}
     blocks: list[Block] = []
 
@@ -42,7 +42,7 @@ def messages_to_blocks(messages: list[Message]) -> list[Block]:
             if "toolUse" in content:
                 tool_use_id = content["toolUse"]["toolUseId"]
                 name = content["toolUse"]["name"]
-                block_type = HTML_TOOL_BLOCK_TYPES.get(name)
+                block_type = RENDER_TOOL_BLOCK_TYPES.get(name)
                 if block_type:
                     tool_input = content["toolUse"]["input"]
                     variant = FIXED_VARIANTS.get(name) or tool_input.get("style")
