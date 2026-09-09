@@ -17,7 +17,9 @@ _EXPIRES_SECONDS = int(
     os.environ.get("VIZ_URL_EXPIRES_SECONDS", _DEFAULT_EXPIRES_SECONDS)
 )
 
-_s3 = boto3.client("s3", region_name=_REGION)
+_s3 = boto3.client(
+    "s3", region_name=_REGION, endpoint_url=f"https://s3.{_REGION}.amazonaws.com"
+)
 
 
 def upload_html(html: str) -> str:
