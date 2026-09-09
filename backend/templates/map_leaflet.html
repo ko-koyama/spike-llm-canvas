@@ -1,0 +1,158 @@
+<html>
+  <head>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1/dist/leaflet.css" />
+    <script src="https://cdn.jsdelivr.net/npm/leaflet@1/dist/leaflet.js"></script>
+    <style>
+      html, body, #map {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+      }
+      #tooltip {
+        position: fixed;
+        pointer-events: none;
+        opacity: 0;
+        background: rgba(0, 0, 0, 0.75);
+        color: #fff;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        white-space: nowrap;
+        z-index: 1000;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="map"></div>
+    <div id="tooltip"></div>
+    <script>
+      const geojson = {{prefectures_geojson}};
+      const config = {{map_config}};
+      const valueByName = new Map(config.points.map((p) => [p.name, p.value]));
+
+      const map = L.map('map');
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+        maxZoom: 18,
+      }).addTo(map);
+
+      const prefectureLayer = drawPrefectures();
+      map.fitBounds(prefectureLayer.getBounds(), { padding: [16, 16] });
+
+      if (config.mode === 'spider') {
+        const lineByName = drawFlowLines();
+        linkPolygonAndLineHover(prefectureLayer, lineByName);
+      }
+
+      function drawPrefectures() {
+        const colorScale = makeColorScale(config.valueMin, config.valueMax, '#fce4d6', '#eb6834');
+
+        return L.geoJSON(geojson, {
+          style: (feature) => {
+            const value = valueByName.get(feature.properties.name);
+            const fillColor =
+              config.mode === 'choropleth' && value != null ? colorScale(value) : '#ccd6e2';
+            return { fillColor, color: '#fff', weight: 0.5, fillOpacity: 0.85 };
+          },
+          onEachFeature: (feature, layer) => {
+            const value = valueByName.get(feature.properties.name);
+            layer.on('mousemove', (e) => {
+              if (value != null) showTooltip(e.originalEvent, feature.properties.name, value);
+            });
+            layer.on('mouseout', hideTooltip);
+          },
+        }).addTo(map);
+      }
+
+      function drawFlowLines() {
+        const widthScale = makeLinearScale(config.valueMin, config.valueMax, 1, 12);
+        const originLatLng = L.latLng(config.origin[1], config.origin[0]);
+
+        L.circleMarker(originLatLng, {
+          radius: 6,
+          color: '#fff',
+          weight: 1.5,
+          fillColor: '#e34948',
+          fillOpacity: 1,
+        }).addTo(map);
+
+        const lineByName = new Map();
+        config.points.forEach((p) => {
+          const line = L.polyline([originLatLng, [p.lat, p.lon]], {
+            color: '#eb6834',
+            opacity: 0.6,
+            weight: widthScale(p.value),
+          }).addTo(map);
+          line.on('mousemove', (e) => showTooltip(e.originalEvent, p.name, p.value));
+          line.on('mouseout', hideTooltip);
+          lineByName.set(p.name, line);
+        });
+        return lineByName;
+      }
+
+      // ポリゴンhoverと線hoverを連動させ、どちらをホバーしても同じ吹き出し・強調が出るようにする
+      function linkPolygonAndLineHover(prefectureLayer, lineByName) {
+        prefectureLayer.eachLayer((layer) => {
+          const name = layer.feature.properties.name;
+          layer.on('mouseover', () => highlight(name));
+          layer.on('mouseout', () => highlight(null));
+        });
+        lineByName.forEach((line, name) => {
+          line.on('mouseover', () => highlight(name));
+          line.on('mouseout', () => highlight(null));
+        });
+
+        function highlight(name) {
+          lineByName.forEach((line, lineName) => {
+            line.setStyle({ opacity: name == null || lineName === name ? 0.6 : 0.1 });
+          });
+        }
+      }
+
+      function makeColorScale(min, max, colorStart, colorEnd) {
+        const c0 = hexToRgb(colorStart);
+        const c1 = hexToRgb(colorEnd);
+        return (value) => {
+          const t = max > min ? clamp((value - min) / (max - min), 0, 1) : 0;
+          const r = Math.round(c0.r + (c1.r - c0.r) * t);
+          const g = Math.round(c0.g + (c1.g - c0.g) * t);
+          const b = Math.round(c0.b + (c1.b - c0.b) * t);
+          return `rgb(${r}, ${g}, ${b})`;
+        };
+      }
+
+      function makeLinearScale(min, max, outMin, outMax) {
+        return (value) => {
+          const t = max > min ? clamp((value - min) / (max - min), 0, 1) : 0;
+          return outMin + (outMax - outMin) * t;
+        };
+      }
+
+      function hexToRgb(hex) {
+        const n = parseInt(hex.slice(1), 16);
+        return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+      }
+
+      function clamp(value, lo, hi) {
+        return Math.min(hi, Math.max(lo, value));
+      }
+
+      function showTooltip(event, name, value) {
+        const tooltip = document.getElementById('tooltip');
+        tooltip.innerHTML = `<strong>${name}</strong>　${value}`;
+        tooltip.style.opacity = 1;
+        moveTooltip(event);
+      }
+
+      function moveTooltip(event) {
+        const tooltip = document.getElementById('tooltip');
+        tooltip.style.left = event.clientX + 12 + 'px';
+        tooltip.style.top = event.clientY + 12 + 'px';
+      }
+
+      function hideTooltip() {
+        document.getElementById('tooltip').style.opacity = 0;
+      }
+    </script>
+  </body>
+</html>

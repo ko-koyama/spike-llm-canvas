@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from strands import tool
 
 _CHART_TEMPLATE = (Path(__file__).parent / "templates" / "chart.html").read_text()
-_MAP_TEMPLATE = (Path(__file__).parent / "templates" / "map_d3.html").read_text()
+_MAP_TEMPLATE = (Path(__file__).parent / "templates" / "map_leaflet.html").read_text()
 _PREFECTURES_GEOJSON = (
     Path(__file__).parent / "data" / "japan_prefectures.geojson"
 ).read_text()
@@ -167,7 +167,7 @@ def _render_map_html(
     points: list[MapPoint],
     origin: str | None = None,
 ) -> str:
-    """地図描画用の設定をD3のmapテンプレートに埋め込みHTML文字列にする。"""
+    """地図描画用の設定をLeafletのmapテンプレートに埋め込みHTML文字列にする。"""
     values = [p.value for p in points if p.value is not None]
     config = {
         "mode": mode,
