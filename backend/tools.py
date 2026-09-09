@@ -7,6 +7,8 @@ from typing import Literal
 from pydantic import BaseModel, Field
 from strands import tool
 
+from storage import upload_html
+
 _CHART_TEMPLATE = (Path(__file__).parent / "templates" / "chart.html").read_text()
 _MAP_TEMPLATE = (Path(__file__).parent / "templates" / "map_leaflet.html").read_text()
 _PREFECTURES_GEOJSON = (
@@ -122,7 +124,8 @@ def render_chart(
         "options": options,
     }
 
-    return _CHART_TEMPLATE.replace("{{chart_config}}", json.dumps(config))
+    html = _CHART_TEMPLATE.replace("{{chart_config}}", json.dumps(config))
+    return upload_html(html)
 
 
 class MapPoint(BaseModel):
@@ -186,4 +189,5 @@ def _render_map_html(
     }
 
     html = _MAP_TEMPLATE.replace("{{prefectures_geojson}}", _PREFECTURES_GEOJSON)
-    return html.replace("{{map_config}}", json.dumps(config))
+    html = html.replace("{{map_config}}", json.dumps(config))
+    return upload_html(html)
