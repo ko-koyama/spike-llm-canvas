@@ -15,7 +15,8 @@ Strands Agentのtool useを使った、チャット上でのグラフ描画な�
 ├── CLAUDE.md               # Claude Code向けの開発ルール
 ├── backend/                # FastAPI + Strands Agent
 ├── frontend/               # React + Vite製のチャット画面
-└── scripts/                # 都道府県GeoJSONデータの生成スクリプト(ビルド時のみ使用)
+├── scripts/                # 都道府県GeoJSONデータの生成スクリプト(ビルド時のみ使用)
+└── terraform/              # S3バケットなどのインフラ定義
 ```
 
 ## 使い方
@@ -23,6 +24,7 @@ Strands Agentのtool useを使った、チャット上でのグラフ描画な�
 ```sh
 # backend (http://localhost:8000)
 cd backend
+export VIZ_S3_BUCKET=spike-llm-canvas-viz
 uv run uvicorn main:app --reload
 
 # frontend (http://localhost:5173)
@@ -37,4 +39,22 @@ npm run dev
   - `render_choropleth`: D3.jsによる都道府県単位の塗り分け地図(コロプレスマップ)の描画
   - `render_spider`: D3.jsによる起点都道府県からの流動線地図(スパイダーマップ)の描画
 - これらのツールが生成したグラフ・地図は、発言の流れの中でチャット画面にそのまま表示される
+- 生成したHTMLはコンテキストの肥大化を防ぐためS3に一時保存し、表示時に署名付きURLを発行する(バケット名は`VIZ_S3_BUCKET`で指定。セットアップ手順は後述)
 - `backend/data/japan_prefectures.geojson`は`scripts/build_prefecture_geojson.sh`で生成した都道府県ポリゴンデータ(生成手順はスクリプト内コメント参照)
+
+## セットアップ(インフラ)
+
+- 生成したHTMLの一時保存に使うS3バケットはTerraformで管理する(`terraform/`)
+- tfstate用バケットは以下コマンドで手動作成する
+
+  ```sh
+  aws s3api create-bucket \
+    --bucket spike-llm-canvas-viz-tfstate \
+    --region ap-northeast-1 \
+    --create-bucket-configuration LocationConstraint=ap-northeast-1
+  ```
+- backend起動前に、作成したバケット名を環境変数に設定する
+
+  ```sh
+  export VIZ_S3_BUCKET=spike-llm-canvas-viz
+  ```

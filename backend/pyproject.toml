@@ -4,6 +4,7 @@ version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
     "awscrt>=0.36.2",
+    "boto3>=1.43.86",
     "fastapi>=0.141.1",
     "strands-agents>=1.54.0",
     "uvicorn[standard]>=0.52.4",

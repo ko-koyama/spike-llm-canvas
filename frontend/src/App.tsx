@@ -2,8 +2,8 @@ import { useState } from 'react'
 
 type ApiBlock =
   | { type: 'text'; text: string }
-  | { type: 'chart'; variant: string | null; html: string }
-  | { type: 'map'; variant: string | null; html: string }
+  | { type: 'chart'; variant: string | null; url: string }
+  | { type: 'map'; variant: string | null; url: string }
 
 // チャット欄に積む表示用ブロック。可視化系はHTMLを直接持たず、vizIdで右ペインの実体を参照する
 type DisplayBlock = { type: 'text'; text: string } | { type: 'viz-ref'; vizId: string }
@@ -20,7 +20,7 @@ type Visualization = {
   id: string
   type: VizType
   variant: string | null
-  html: string
+  url: string
 }
 
 const VIZ_TYPE_LABELS: Record<VizType, string> = { chart: 'グラフ', map: '地図' }
@@ -156,7 +156,7 @@ function splitVisualizations(blocks: ApiBlock[]): {
   const newVisualizations: Visualization[] = []
   const displayBlocks: DisplayBlock[] = blocks.map((b) => {
     if (b.type === 'text') return b
-    const viz: Visualization = { id: crypto.randomUUID(), type: b.type, variant: b.variant, html: b.html }
+    const viz: Visualization = { id: crypto.randomUUID(), type: b.type, variant: b.variant, url: b.url }
     newVisualizations.push(viz)
     return { type: 'viz-ref', vizId: viz.id }
   })
@@ -201,7 +201,7 @@ function CanvasPanel({
           ))}
         </div>
         <div className="canvas-panel-actions">
-          <button type="button" className="canvas-panel-download" onClick={() => downloadViz(activeViz, activeIndex)}>
+          <button type="button" className="canvas-panel-download" onClick={() => void downloadViz(activeViz, activeIndex)}>
             ⬇ ダウンロード
           </button>
           <button type="button" className="canvas-panel-close" onClick={onClose}>
@@ -210,19 +210,25 @@ function CanvasPanel({
         </div>
       </div>
       <div className="canvas-panel-body">
-        <iframe className="canvas-frame" srcDoc={activeViz.html} sandbox="allow-scripts" />
+        <iframe className="canvas-frame" src={activeViz.url} sandbox="allow-scripts" />
       </div>
     </div>
   )
 }
 
-// 選択中の可視化のHTMLをファイルとしてダウンロードさせる
-function downloadViz(viz: Visualization, index: number) {
-  const blob = new Blob([viz.html], { type: 'text/html' })
-  const url = URL.createObjectURL(blob)
+// 選択中の可視化のHTMLをS3から取得し、ファイルとしてダウンロードさせる
+async function downloadViz(viz: Visualization, index: number) {
+  const res = await fetch(viz.url)
+  if (!res.ok) {
+    alert('ダウンロードに失敗しました')
+    return
+  }
+  const html = await res.text()
+  const blob = new Blob([html], { type: 'text/html' })
+  const blobUrl = URL.createObjectURL(blob)
   const a = document.createElement('a')
-  a.href = url
+  a.href = blobUrl
   a.download = `${index + 1}_${vizLabel(viz)}.html`
   a.click()
-  URL.revokeObjectURL(url)
+  URL.revokeObjectURL(blobUrl)
 }
