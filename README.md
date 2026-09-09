@@ -39,12 +39,13 @@ npm run dev
   - `render_choropleth`: D3.jsによる都道府県単位の塗り分け地図(コロプレスマップ)の描画
   - `render_spider`: D3.jsによる起点都道府県からの流動線地図(スパイダーマップ)の描画
 - これらのツールが生成したグラフ・地図は、発言の流れの中でチャット画面にそのまま表示される
+- 生成したHTMLはコンテキストの肥大化を防ぐためS3に一時保存し、表示時に署名付きURLを発行する(バケット名は`VIZ_S3_BUCKET`で指定。セットアップ手順は後述)
 - `backend/data/japan_prefectures.geojson`は`scripts/build_prefecture_geojson.sh`で生成した都道府県ポリゴンデータ(生成手順はスクリプト内コメント参照)
 
-## インフラのセットアップ(S3)
+## セットアップ(インフラ)
 
-- 可視化HTMLの一時保存に使うS3バケットはTerraformで管理する(`terraform/`)
-- tfstate用バケットはTerraform管理外。初回のみ以下のコマンドで手動作成する
+- 生成したHTMLの一時保存に使うS3バケットはTerraformで管理する(`terraform/`)
+- tfstate用バケットは以下コマンドで手動作成する
 
   ```sh
   aws s3api create-bucket \
@@ -52,17 +53,6 @@ npm run dev
     --region ap-northeast-1 \
     --create-bucket-configuration LocationConstraint=ap-northeast-1
   ```
-
-- データ用バケットの作成・更新
-
-  ```sh
-  cd terraform
-  terraform init
-  terraform apply
-  ```
-
-  - コンテナ内では`aws login`済みプロファイルの認証情報をTerraformのAWSプロバイダが直接読めない場合がある(`No valid credential sources found`)。その場合は`aws configure export-credentials --format env`で一時的に環境変数へエクスポートしてから`terraform`コマンドを実行する
-
 - backend起動前に、作成したバケット名を環境変数に設定する
 
   ```sh
