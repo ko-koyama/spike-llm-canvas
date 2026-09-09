@@ -4,6 +4,7 @@ import os
 import uuid
 
 import boto3
+from botocore.config import Config
 
 # Bedrock呼び出し用のデフォルトリージョンとは独立して固定する
 _REGION = "ap-northeast-1"
@@ -18,7 +19,9 @@ _EXPIRES_SECONDS = int(
 )
 
 _s3 = boto3.client(
-    "s3", region_name=_REGION, endpoint_url=f"https://s3.{_REGION}.amazonaws.com"
+    "s3",
+    region_name=_REGION,
+    config=Config(signature_version="s3v4", s3={"addressing_style": "virtual"}),
 )
 
 

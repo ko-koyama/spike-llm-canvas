@@ -24,6 +24,7 @@ Strands Agentのtool useを使った、チャット上でのグラフ描画な�
 ```sh
 # backend (http://localhost:8000)
 cd backend
+export VIZ_S3_BUCKET=spike-llm-canvas-viz
 uv run uvicorn main:app --reload
 
 # frontend (http://localhost:5173)

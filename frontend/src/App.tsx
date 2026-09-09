@@ -219,6 +219,10 @@ function CanvasPanel({
 // 選択中の可視化のHTMLをS3から取得し、ファイルとしてダウンロードさせる
 async function downloadViz(viz: Visualization, index: number) {
   const res = await fetch(viz.url)
+  if (!res.ok) {
+    alert('ダウンロードに失敗しました')
+    return
+  }
   const html = await res.text()
   const blob = new Blob([html], { type: 'text/html' })
   const blobUrl = URL.createObjectURL(blob)
