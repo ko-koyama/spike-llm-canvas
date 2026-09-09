@@ -12,7 +12,7 @@
 ### `backend/storage.py`(新規)
 
 - `upload_html(html: str) -> str`: HTMLをS3にPutObjectし、オブジェクトキー(例: `viz/<uuid4>.html`)を返す
-  - アップロード時に`ContentType: text/html`、`ContentDisposition: attachment; filename="..."`を設定する(フロントのダウンロード機能で利用)
+  - アップロード時に`ContentType: text/html`を設定する。`ContentDisposition: attachment`は設定しない(設定するとブラウザがダウンロード扱いにしてしまい、iframeでのインライン描画ができなくなるため)
 - `presign(key: str) -> str`: 指定キーに対する署名付きGET URLをその場で生成して返す
 - 環境変数
   - `VIZ_S3_BUCKET`(必須): 保存先バケット名。未設定時はモジュールimport時に`RuntimeError`(既存のテンプレート読み込みと同じfail-fast方針)
@@ -34,7 +34,7 @@
 
 - `Visualization.html`を`Visualization.url`にリネーム
 - `CanvasPanel`のiframeを`srcDoc={activeViz.html}`から`src={activeViz.url}`に変更(`sandbox="allow-scripts"`は維持)
-- ダウンロード機能: クライアント側での`Blob`生成ロジックを廃止し、`url`への遷移(新規タブで開く、または`<a href={url}>`)に置き換える。ダウンロードとして扱われるかはS3オブジェクトの`ContentDisposition: attachment`ヘッダに委ねる
+- ダウンロード機能: `viz.html`を直接Blob化する現行ロジックを、`fetch(viz.url)`でHTMLを取得してからBlob化する形に変更する(オブジェクト自体は`ContentDisposition`未設定でインライン描画用のままなので、ダウンロードはクライアント側のfetch+Blobで実現する)
 
 ## データフロー
 
@@ -51,6 +51,7 @@
 - `terraform/`配下にデータ保存用S3バケット(`spike-llm-canvas-viz`、リージョン`ap-northeast-1`)のみを定義する
   - パブリックアクセスブロックを有効化(非公開バケット。アクセスは署名付きURL経由のみ)
   - ライフサイクルルールで7日後にオブジェクトを自動削除する
+  - CORS設定(GETメソッドを許可)を追加する。フロントエンドの「ダウンロード」機能が`fetch(viz.url)`でS3から直接HTMLを取得するため、フロント側オリジンからのクロスオリジン読み取りをCORSで許可する必要がある(iframeでの表示自体はCORS不要だが、`fetch`によるレスポンスボディ読み取りには必要)
   - 各リソースブロックには目的を1行コメントで記載する(CLAUDE.mdのTerraform規約)
 - tfstate用バケット(`spike-llm-canvas-viz-tfstate`、リージョン`ap-northeast-1`)はTerraform管理対象外とし、aws CLIで手動作成する。作成手順はREADMEに記載する
   - Terraformの`backend "s3"`ブロックでこの手動作成済みバケットを参照する
