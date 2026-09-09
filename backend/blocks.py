@@ -50,7 +50,7 @@ def messages_to_blocks(messages: list[Message]) -> list[Block]:
             elif "toolResult" in content:
                 tool_use_id = content["toolResult"]["toolUseId"]
                 info = tool_info_by_id.get(tool_use_id)
-                # tool側がエラーを返した場合は、可視化ブロックを作らない(LLMがテキストで説明する)
+                # エラー時は可視化ブロックを作らない(LLMがテキストで説明する)
                 if info and content["toolResult"]["status"] == "success":
                     block_type, variant = info
                     key = _extract_key(content["toolResult"])

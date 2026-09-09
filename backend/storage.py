@@ -36,7 +36,7 @@ def upload_html(html: str) -> str:
             ContentType="text/html; charset=utf-8",
         )
     except Exception as e:
-        # AWSのエラー詳細(バケット名など内部情報)をLLM/ユーザーに渡さないよう汎用メッセージに変換する
+        # AWSのエラー詳細をLLM/ユーザーに渡さないよう汎用メッセージに変換する
         raise ValueError("データの可視化に失敗しました") from e
     return key
 
