@@ -60,6 +60,8 @@ npm run dev
   terraform apply
   ```
 
+  - コンテナ内では`aws login`済みプロファイルの認証情報をTerraformのAWSプロバイダが直接読めない場合がある(`No valid credential sources found`)。その場合は`aws configure export-credentials --format env`で一時的に環境変数へエクスポートしてから`terraform`コマンドを実行する
+
 - backend起動前に、作成したバケット名を環境変数に設定する
 
   ```sh
