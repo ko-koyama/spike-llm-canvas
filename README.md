@@ -15,7 +15,8 @@ Strands Agentのtool useを使った、チャット上でのグラフ描画な�
 ├── CLAUDE.md               # Claude Code向けの開発ルール
 ├── backend/                # FastAPI + Strands Agent
 ├── frontend/               # React + Vite製のチャット画面
-└── scripts/                # 都道府県GeoJSONデータの生成スクリプト(ビルド時のみ使用)
+├── scripts/                # 都道府県GeoJSONデータの生成スクリプト(ビルド時のみ使用)
+└── terraform/              # S3バケットなどのインフラ定義
 ```
 
 ## 使い方
@@ -38,3 +39,29 @@ npm run dev
   - `render_spider`: D3.jsによる起点都道府県からの流動線地図(スパイダーマップ)の描画
 - これらのツールが生成したグラフ・地図は、発言の流れの中でチャット画面にそのまま表示される
 - `backend/data/japan_prefectures.geojson`は`scripts/build_prefecture_geojson.sh`で生成した都道府県ポリゴンデータ(生成手順はスクリプト内コメント参照)
+
+## インフラのセットアップ(S3)
+
+- 可視化HTMLの一時保存に使うS3バケットはTerraformで管理する(`terraform/`)
+- tfstate用バケットはTerraform管理外。初回のみ以下のコマンドで手動作成する
+
+  ```sh
+  aws s3api create-bucket \
+    --bucket spike-llm-canvas-viz-tfstate \
+    --region ap-northeast-1 \
+    --create-bucket-configuration LocationConstraint=ap-northeast-1
+  ```
+
+- データ用バケットの作成・更新
+
+  ```sh
+  cd terraform
+  terraform init
+  terraform apply
+  ```
+
+- backend起動前に、作成したバケット名を環境変数に設定する
+
+  ```sh
+  export VIZ_S3_BUCKET=spike-llm-canvas-viz
+  ```
