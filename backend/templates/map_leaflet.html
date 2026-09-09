@@ -52,7 +52,7 @@
             const value = valueByName.get(feature.properties.name);
             const fillColor =
               config.mode === 'choropleth' && value != null ? colorScale(value) : '#ccd6e2';
-            return { fillColor, color: '#fff', weight: 0.5, fillOpacity: 0.85 };
+            return { fillColor, color: '#898781', weight: 1, fillOpacity: 0.85 };
           },
           onEachFeature: (feature, layer) => {
             const value = valueByName.get(feature.properties.name);
