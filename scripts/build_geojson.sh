@@ -14,12 +14,12 @@ trap 'rm -rf "$WORKDIR"' EXIT
 case "$LEVEL" in
   prefecture)
     DISSOLVE_FIELDS="N03_001"
-    SIMPLIFY_PCT="2%"
+    SIMPLIFY_PCT="0.02%"
     OUT_FILE="${REPO_ROOT}/backend/data/japan_prefectures.geojson"
     ;;
   municipality)
     DISSOLVE_FIELDS="N03_001,N03_003,N03_004"
-    SIMPLIFY_PCT="5%"
+    SIMPLIFY_PCT="0.5%"
     OUT_FILE="${REPO_ROOT}/backend/data/japan_municipalities.geojson"
     ;;
   *)
@@ -44,10 +44,13 @@ fi
 echo "==> mapshaperで${LEVEL}単位に統合・簡略化中..."
 mkdir -p "${REPO_ROOT}/backend/data"
 DISSOLVED="${WORKDIR}/dissolved.geojson"
+# 元データの座標密度が非常に高く(全国で1000万点超)、
+# -clean を simplify の後に置くと自己交差の修復に失敗し
+# 出力が肥大化するため、簡略化前に一度topologyを整えておく。
 npx --yes mapshaper "$SHP" \
   -proj wgs84 \
   -dissolve2 fields="$DISSOLVE_FIELDS" \
-  -simplify dp 0.3% keep-shapes \
+  -clean \
   -simplify dp "$SIMPLIFY_PCT" keep-shapes \
   -clean \
   -o format=geojson precision=0.0001 "$DISSOLVED"
