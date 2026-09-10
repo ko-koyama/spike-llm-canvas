@@ -165,30 +165,20 @@ if __name__ == "__main__":
 
 - [ ] **Step 3: `build_geojson.sh`に代表点生成ステップを追加する**
 
-`scripts/build_geojson.sh`の`case`ブロックに`POINTS_FILE`を追加し、末尾に生成ステップを追加する。
+> **注:** Task 1がe-Statデータソースへの切り替えに伴い`scripts/build_geojson.sh`を書き直しているため、現在のスクリプトは上記(Step 1)のコードとは異なる。実装時は現在のファイルを実際に読んで、以下の差分を反映すること。`municipality)`ブランチには既に`POINTS_FILE`が定義済みなので、`prefecture)`ブランチにのみ追加すればよい。
+
+`scripts/build_geojson.sh`の`case`ブロック内、`prefecture)`ブランチに`POINTS_FILE`を1行追加する。
 
 ```bash
-case "$LEVEL" in
   prefecture)
     DISSOLVE_FIELDS="N03_001"
-    SIMPLIFY_PCT="2%"
+    SIMPLIFY_PCT="0.02%"
     OUT_FILE="${REPO_ROOT}/backend/data/japan_prefectures.geojson"
     POINTS_FILE="${REPO_ROOT}/backend/data/prefecture_points.json"
     ;;
-  municipality)
-    DISSOLVE_FIELDS="N03_001,N03_003,N03_004"
-    SIMPLIFY_PCT="5%"
-    OUT_FILE="${REPO_ROOT}/backend/data/japan_municipalities.geojson"
-    POINTS_FILE="${REPO_ROOT}/backend/data/municipality_points.json"
-    ;;
-  *)
-    echo "不明なlevelです: ${LEVEL} (prefecture|municipalityを指定してください)" >&2
-    exit 1
-    ;;
-esac
 ```
 
-ファイル末尾(`wc -c "$OUT_FILE"`の後)に追記する。
+ファイル末尾(`echo "==> 生成完了: ${OUT_FILE}"` / `wc -c "$OUT_FILE"`の後)に追記する。
 
 ```bash
 echo "==> 代表点座標を計算中..."
