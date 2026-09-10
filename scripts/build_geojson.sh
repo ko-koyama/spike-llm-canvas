@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# MLIT国土数値情報(N03, 行政区域データ)の一次ソースから
 # levelに応じた行政区画単位(都道府県 or 市区町村)に統合・簡略化したGeoJSONを生成するビルドスクリプト。
+# levelごとにデータソースが異なる。
+#   prefecture:   MLIT国土数値情報(N03)をダウンロードして生成
+#   municipality: e-Stat小地域境界データ(shapefile/に手動配置)から生成
+#                 ※N03には政令指定都市の区の境界が無いため
 # 実行時には関与しない、ビルド時のみのツール。
 
 LEVEL="${1:?levelを指定してください(prefecture|municipality)}"
@@ -43,7 +46,7 @@ case "$LEVEL" in
     find "$SHAPE_DIR" -name '*.shp' -print0 | while IFS= read -r -d '' shp; do
       base="${shp%.shp}"
       for ext in shp shx dbf prj cpg; do
-        [ -f "${base}.${ext}" ] && ln -sf "${base}.${ext}" "${EXTRACT_DIR}/"
+        [ -f "${base}.${ext}" ] && ln -sf "${base}.${ext}" "${EXTRACT_DIR}/" || true
       done
     done
 
@@ -65,6 +68,7 @@ case "$LEVEL" in
     ;;
 esac
 
+# N03のダウンロードはprefectureのみ必要。municipalityはshapefile/のe-Statデータを使う
 if [ "$LEVEL" = "prefecture" ]; then
   echo "==> N03-${YEAR}をダウンロード中..."
   curl -L -o "${WORKDIR}/N03.zip" \
