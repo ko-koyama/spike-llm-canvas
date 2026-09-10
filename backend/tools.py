@@ -14,36 +14,6 @@ _CHART_TEMPLATE = (Path(__file__).parent / "templates" / "chart.html").read_text
 _MAP_TEMPLATE = (Path(__file__).parent / "templates" / "map_leaflet.html").read_text()
 LevelName = Literal["prefecture", "municipality"]
 
-_LEVEL_FILES: dict[LevelName, tuple[str, str]] = {
-    "prefecture": ("japan_prefectures.geojson", "prefecture_points.json"),
-    "municipality": ("japan_municipalities.geojson", "municipality_points.json"),
-}
-
-
-@dataclass(frozen=True)
-class _LevelData:
-    """levelごとの地図データ。
-
-    パース済みGeoJSON FeatureCollectionと地点名→座標の辞書を保持する。
-    """
-
-    geojson: dict
-    points: dict[str, list[float]]
-
-
-def _load_level_data(geojson_filename: str, points_filename: str) -> _LevelData:
-    """dataディレクトリからGeoJSONと座標辞書を読み込む。"""
-    data_dir = Path(__file__).parent / "data"
-    return _LevelData(
-        geojson=json.loads((data_dir / geojson_filename).read_text()),
-        points=json.loads((data_dir / points_filename).read_text()),
-    )
-
-
-_LEVEL_DATA: dict[LevelName, _LevelData] = {
-    level: _load_level_data(*files) for level, files in _LEVEL_FILES.items()
-}
-
 # 系列カラー未指定時のデフォルト配色
 _DEFAULT_SERIES_COLORS = [
     "#0081cf",  # 青
@@ -196,22 +166,39 @@ def render_spider(
     )
 
 
+# --- 以下、地図ツールの内部ヘルパー(呼び出される側が下になるよう並べている) ---
+
+_LEVEL_FILES: dict[LevelName, tuple[str, str]] = {
+    "prefecture": ("japan_prefectures.geojson", "prefecture_points.json"),
+    "municipality": ("japan_municipalities.geojson", "municipality_points.json"),
+}
+
+
+@dataclass(frozen=True)
+class _LevelData:
+    """levelごとの地図データ。
+
+    パース済みGeoJSON FeatureCollectionと地点名→座標の辞書を保持する。
+    """
+
+    geojson: dict
+    points: dict[str, list[float]]
+
+
+def _load_level_data(geojson_filename: str, points_filename: str) -> _LevelData:
+    """dataディレクトリからGeoJSONと座標辞書を読み込む。"""
+    data_dir = Path(__file__).parent / "data"
+    return _LevelData(
+        geojson=json.loads((data_dir / geojson_filename).read_text()),
+        points=json.loads((data_dir / points_filename).read_text()),
+    )
+
+
+_LEVEL_DATA: dict[LevelName, _LevelData] = {
+    level: _load_level_data(*files) for level, files in _LEVEL_FILES.items()
+}
+
 _MUNICIPALITY_POINTS_LIMIT = 50
-
-
-def _point_key(level: LevelName, prefecture: str, municipality: str | None) -> str:
-    """levelに応じてMapPointから座標辞書の検索キーを作る。"""
-    if level == "municipality":
-        if not municipality:
-            raise ValueError(
-                "levelが'municipality'の場合はmunicipalityの指定が必須です"
-            )
-        return f"{prefecture}{municipality}"
-    if municipality:
-        raise ValueError(
-            f"levelが'prefecture'の場合はmunicipalityを指定できません: {municipality}"
-        )
-    return prefecture
 
 
 def _validate_map_points(level: LevelName, points: list[MapPoint]) -> None:
@@ -232,27 +219,6 @@ def _validate_map_points(level: LevelName, points: list[MapPoint]) -> None:
         if key in seen:
             raise ValueError(f"pointsに同じ地点が重複しています: {key}")
         seen.add(key)
-
-
-def _point_config(level: LevelName, point: MapPoint) -> dict:
-    """MapPointを地図描画用のpoint設定(name/value/lon/lat)に変換する。"""
-    key = _point_key(level, point.prefecture, point.municipality)
-    lon, lat = _LEVEL_DATA[level].points[key]
-    return {"name": key, "value": point.value, "lon": lon, "lat": lat}
-
-
-def _regions_geojson(level: LevelName, points: list[MapPoint]) -> dict:
-    """埋め込み用GeoJSONを返す。市区町村レベルはpointsに対応する地域のみへ絞り込む(全国約1,900件を毎回埋め込むとサイズ・描画負荷の両面で実用に耐えないため)。都道府県レベルは47件のみで軽量なため、値のない地域もグレー表示できるよう全国分をそのまま返す。"""
-    level_data = _LEVEL_DATA[level]
-    if level == "prefecture":
-        return level_data.geojson
-    keys = {_point_key(level, p.prefecture, p.municipality) for p in points}
-    return {
-        "type": "FeatureCollection",
-        "features": [
-            f for f in level_data.geojson["features"] if f["properties"]["name"] in keys
-        ],
-    }
 
 
 def _render_map_html(
@@ -277,3 +243,39 @@ def _render_map_html(
     )
     html = html.replace("{{map_config}}", json.dumps(config))
     return upload_html(html)
+
+
+def _regions_geojson(level: LevelName, points: list[MapPoint]) -> dict:
+    """埋め込み用GeoJSONを返す。市区町村レベルはpointsに対応する地域のみへ絞り込む(全国約1,900件を毎回埋め込むとサイズ・描画負荷の両面で実用に耐えないため)。都道府県レベルは47件のみで軽量なため、値のない地域もグレー表示できるよう全国分をそのまま返す。"""
+    level_data = _LEVEL_DATA[level]
+    if level == "prefecture":
+        return level_data.geojson
+    keys = {_point_key(level, p.prefecture, p.municipality) for p in points}
+    return {
+        "type": "FeatureCollection",
+        "features": [
+            f for f in level_data.geojson["features"] if f["properties"]["name"] in keys
+        ],
+    }
+
+
+def _point_config(level: LevelName, point: MapPoint) -> dict:
+    """MapPointを地図描画用のpoint設定(name/value/lon/lat)に変換する。"""
+    key = _point_key(level, point.prefecture, point.municipality)
+    lon, lat = _LEVEL_DATA[level].points[key]
+    return {"name": key, "value": point.value, "lon": lon, "lat": lat}
+
+
+def _point_key(level: LevelName, prefecture: str, municipality: str | None) -> str:
+    """levelに応じてMapPointから座標辞書の検索キーを作る。"""
+    if level == "municipality":
+        if not municipality:
+            raise ValueError(
+                "levelが'municipality'の場合はmunicipalityの指定が必須です"
+            )
+        return f"{prefecture}{municipality}"
+    if municipality:
+        raise ValueError(
+            f"levelが'prefecture'の場合はmunicipalityを指定できません: {municipality}"
+        )
+    return prefecture
