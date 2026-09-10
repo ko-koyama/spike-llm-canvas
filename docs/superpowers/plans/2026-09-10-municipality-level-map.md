@@ -356,7 +356,7 @@ class MapPoint(BaseModel):
 ```python
 @tool
 def render_choropleth(level: LevelName, points: list[MapPoint]) -> str:
-    """指定レベル(都道府県 or 市区町村)の単位で数値を地図上に塗り分け表示する。"""
+    """指定レベル(都道府県 or 市区町村)の単位で数値を地図上に塗り分け表示する。市区町村レベルの場合、pointsは50件までしか指定できない。"""
     points = [MapPoint.model_validate(p) for p in points]
     _validate_map_points(level, points)
 
@@ -365,9 +365,12 @@ def render_choropleth(level: LevelName, points: list[MapPoint]) -> str:
 
 - [ ] **Step 4: `_validate_map_points`・`_render_map_html`をlevel対応にする(`render_spider`は次タスクで対応するため、ここでは一旦削除して構わない)**
 
-既存の`_validate_map_points`・`_render_map_html`を削除し、以下に置き換える。
+既存の`_validate_map_points`・`_render_map_html`を削除し、以下に置き換える。市区町村レベルは件数が多く、地図上に大量表示すると視認性・描画負荷の両面で実用に耐えないため、`points`の件数に上限(`_MUNICIPALITY_POINTS_LIMIT = 50`)を設ける(都道府県レベルは47件で収まるため上限は設けない)。
 
 ```python
+_MUNICIPALITY_POINTS_LIMIT = 50
+
+
 def _point_key(level: LevelName, prefecture: str, municipality: str | None) -> str:
     """levelに応じてMapPointから座標辞書の検索キーを作る。"""
     if level == "municipality":
@@ -378,9 +381,13 @@ def _point_key(level: LevelName, prefecture: str, municipality: str | None) -> s
 
 
 def _validate_map_points(level: LevelName, points: list[MapPoint]) -> None:
-    """MapPointのリストが空でなく、すべて既知の地点かを検証する。"""
+    """MapPointのリストが空でなく、件数上限内で、すべて既知の地点かを検証する。"""
     if not points:
         raise ValueError("pointsが空です")
+    if level == "municipality" and len(points) > _MUNICIPALITY_POINTS_LIMIT:
+        raise ValueError(
+            f"市区町村レベルで指定できるpointsは{_MUNICIPALITY_POINTS_LIMIT}件までです(指定件数: {len(points)})"
+        )
     known = _LEVEL_DATA[level].points
     for point in points:
         key = _point_key(level, point.prefecture, point.municipality)
@@ -457,6 +464,14 @@ try:
 except ValueError as e:
     print(f'OK: {e}')
 
+# 準正常系: 市区町村レベルでpointsが50件を超える
+try:
+    too_many = [MapPoint(prefecture='東京都', municipality='府中市', value=1.0) for _ in range(51)]
+    _validate_map_points('municipality', too_many)
+    print('NG: 例外が発生しなかった')
+except ValueError as e:
+    print(f'OK: {e}')
+
 # 正常系: render_choropleth相当(_validate_map_points + _render_map_html)でHTML生成までできること(S3設定済みであること)
 key = _render_map_html(mode='choropleth', level='municipality', points=points)
 print('OK: _render_map_html ->', key)
@@ -492,7 +507,7 @@ git commit -m "feat: 地図ツールをlevel対応に拡張"
 def render_spider(
     level: LevelName, origin_lat: float, origin_lon: float, points: list[MapPoint]
 ) -> str:
-    """起点となる緯度経度から、指定レベル(都道府県 or 市区町村)の各地点への流動線を地図上に描く。線の太さは値に比例する。"""
+    """起点となる緯度経度から、指定レベル(都道府県 or 市区町村)の各地点への流動線を地図上に描く。線の太さは値に比例する。市区町村レベルの場合、pointsは50件までしか指定できない。"""
     points = [MapPoint.model_validate(p) for p in points]
     _validate_map_points(level, points)
 
