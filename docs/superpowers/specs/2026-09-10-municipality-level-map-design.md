@@ -10,16 +10,29 @@
 
 ### データ生成(`scripts/build_geojson.sh`、既存の`build_prefecture_geojson.sh`を置き換え)
 
-- MLIT N03データのダウンロード・展開処理は既存のまま流用する
-- 第1引数で`level`(`prefecture`|`municipality`)を受け取り、以下を`level`ごとに切り替える
-  - dissolve対象フィールド: `prefecture`は`N03_001`のみ、`municipality`は`N03_001`+`N03_003`+`N03_004`
-  - 結合後の地域名(`name`プロパティ): 各フィールドを連結した文字列(例: `"東京都府中市"`)。この文字列が`tools.py`側の検索キーと一致する
-  - simplifyの閾値: 市区町村は都道府県よりポリゴンが細かいため、levelごとに適切な値を実装時に調整する
-  - 出力ファイル名: `backend/data/japan_prefectures.geojson` / `japan_municipalities.geojson`
+第1引数で`level`(`prefecture`|`municipality`)を受け取る。levelごとにデータソースと生成経路が異なる。
+
+**`prefecture`(現行どおり、MLIT N03を使用)**
+
+- MLIT国土数値情報(N03、行政区域データ)を`curl`でダウンロードし、`N03_001`(都道府県名)で`dissolve2`する
+- simplifyは`-clean`をdissolve直後・simplify後の2箇所で行い、`-simplify dp 0.02% keep-shapes`で簡略化する(実装時の検証で、`-clean`をsimplifyの後だけに置くとmapshaperの自己交差解消が失敗し出力が肥大化する不具合を確認済みのため、この順序を必須とする)
+- 出力: `backend/data/japan_prefectures.geojson`(47件、目安数十KB)
+
+**`municipality`(e-Statの小地域(町丁・字等)境界データを使用。N03には政令指定都市の区の境界が含まれていないため)**
+
+- MLIT N03には政令指定都市の区(例: 横浜市中区)の境界が独立したポリゴンとして存在しない(実データで確認済み: `N03_004`が区によらず市名のまま)ため、区を区別できるデータソースに切り替える
+- データソース: 「令和2年国勢調査 小地域集計」の境界データ(e-Stat 統計地理情報システム、都道府県ごとにshapefile形式・世界測地系緯度経度でダウンロード)。属性に`PREF_NAME`(都道府県名)・`CITY_NAME`(市区町村名。政令指定都市は区名まで含む。例: `"札幌市中央区"`)を持つ
+- このデータは本来、町丁目(`S_NAME`)単位の細かい境界データだが、`PREF_NAME`+`CITY_NAME`で`dissolve2`することで市区町村(区を含む)レベルのポリゴンが得られる。将来の町丁目レベル対応でも同じデータソースをそのまま(集約せずに)使える想定
+- 取得方法: e-Statの境界データダウンロードは公式APIがなく認証不要の手動ダウンロードのみのため、**ユーザーが手動で47都道府県分をダウンロードし、`reference/shapefile/`配下にzipのまま(リネーク不要)配置する**。このディレクトリはビルド時の入力素材のみでサイズが大きいため`.gitignore`対象とし、コミットしない
+- ビルドスクリプトは`reference/shapefile/*.zip`(または展開済みディレクトリ)をすべて展開し、`combine-files`で1レイヤーに結合してから`dissolve2 fields=PREF_NAME,CITY_NAME`する。ファイル名から都道府県を判定する必要はない(`PREF_NAME`属性で判別できるため)
+- 出力: `backend/data/japan_municipalities.geojson`(政令指定都市の区を含む市区町村単位、目安数MB)
+
+**共通(levelによらず)**
+
+- 結合後の地域名(`name`プロパティ)は、dissolveに使ったフィールドを連結した文字列(`prefecture`は`N03_001`そのもの、`municipality`は`PREF_NAME`+`CITY_NAME`。例: `"東京都府中市"`, `"神奈川県横浜市中区"`)。この文字列が`tools.py`側の検索キーと一致する
 - 生成したポリゴンから各地域の代表点(重心)を計算し、`backend/data/prefecture_points.json` / `municipality_points.json`として出力する
-  - 従来手打ちだった`prefecture_points.json`もこの自動生成に置き換える(1,700件規模の市区町村を手打ちするのは非現実的なため、都道府県も同じ仕組みに統一する)
+  - 従来手打ちだった`prefecture_points.json`もこの自動生成に置き換える
   - 離島を含む都道府県(沖縄県、東京都、長崎県、鹿児島県など)で重心がポリゴン外や不自然な位置にならないか実装時に確認する。問題があれば該当地域のみ個別に座標を上書きする対応を検討する
-  - 町丁目レベルを追加する際も同じ仕組みで対応する想定
 
 ### `backend/tools.py`
 
@@ -43,8 +56,9 @@
   - 既存の「originと同名のpointを除外する」フィルタは、originが行政区画に紐づかなくなるため不要になり削除する
 - levelごとのデータ管理
   - `_LEVEL_FILES: dict[LevelName, tuple[str, str]]`でgeojson/pointsファイル名を定義する
-  - `_LevelData`をdataclassで定義し(`geojson: str`, `points: dict[str, list[float]]`)、モジュールロード時に全level分を読み込む(既存のfail-fast方針を踏襲)
+  - `_LevelData`をdataclassで定義し(`geojson: dict`(パース済みFeatureCollection), `points: dict[str, list[float]]`)、モジュールロード時に全level分を読み込む(既存のfail-fast方針を踏襲)
   - `_point_key(level, prefecture, municipality)`で検索キーを生成する(`prefecture`レベルは`prefecture`そのまま、`municipality`レベルは`prefecture`+`municipality`を連結)
+- 埋め込むGeoJSONの絞り込み: `municipality`レベルは常に`points`で指定された地域(最大50件)のポリゴンのみをHTMLに埋め込む。全国約1,900件を毎回埋め込むと(政令指定都市の区を含む詳細な境界のため)サイズが大きくブラウザの描画負荷も高いためで、`points`が最大50件までに制限されていることとも整合する。この場合、埋め込んだ地図には指定地域以外の行政境界は表示されない(全国の中でどこにあるかという地理的文脈は失われる)。`prefecture`レベルは47件のみで軽量なため、従来通り全国分をそのまま埋め込み、値のない地域もグレー表示で地図に含める
   - `_validate_map_points(level, points)`、`_render_map_html(mode, level, points, origin)`をlevel対応に更新する
 
 ### `backend/templates/map_leaflet.html`

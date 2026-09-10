@@ -3,6 +3,9 @@
 .worktrees/
 .superpowers/
 
+# e-Statから手動ダウンロードした境界データの元データ(ビルド時のみ使用、サイズが大きいためコミットしない)
+reference/shapefile/
+
 # Python
 __pycache__/
 *.pyc
