@@ -3,7 +3,7 @@
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Literal, get_args
 
 from pydantic import BaseModel, Field
 from strands import tool
@@ -12,7 +12,7 @@ from storage import upload_html
 
 _CHART_TEMPLATE = (Path(__file__).parent / "templates" / "chart.html").read_text()
 _MAP_TEMPLATE = (Path(__file__).parent / "templates" / "map_leaflet.html").read_text()
-LevelName = Literal["prefecture", "municipality"]
+LevelName = Literal["prefecture", "municipality", "town"]
 
 # 系列カラー未指定時のデフォルト配色
 _DEFAULT_SERIES_COLORS = [
@@ -131,18 +131,23 @@ class MapPoint(BaseModel):
     municipality: str | None = Field(
         default=None,
         description=(
-            "市区町村名。levelが'municipality'の場合のみ指定する(例: '府中市')。"
-            "政令指定都市の区を指定する場合は区名まで含める(例: '横浜市中区')"
+            "市区町村名。levelが'municipality'または'town'の場合のみ指定する"
+            "(例: '府中市')。政令指定都市の区を指定する場合は区名まで含める"
+            "(例: '横浜市中区')"
         ),
+    )
+    town: str | None = Field(
+        default=None,
+        description=("町丁目名。levelが'town'の場合のみ指定する(例: '丸の内一丁目')"),
     )
     value: float | None = None  # 塗り分けの濃淡、および流動線の太さに使う数値
 
 
 @tool
 def render_choropleth(level: LevelName, points: list[MapPoint]) -> str:
-    """指定レベル(都道府県 or 市区町村)の単位で数値を地図上に塗り分け表示する。
+    """指定レベル(都道府県 / 市区町村 / 町丁目)の単位で数値を地図上に塗り分け表示する。
 
-    市区町村レベルの場合、pointsは50件までしか指定できない。
+    市区町村・町丁目レベルの場合、pointsは50件までしか指定できない。
     """
     points = [MapPoint.model_validate(p) for p in points]
     _validate_map_points(level, points)
@@ -156,7 +161,7 @@ def render_spider(
 ) -> str:
     """起点となる緯度経度から、指定レベルの各地点への流動線を地図上に描く。
 
-    線の太さは値に比例する。市区町村レベルの場合、pointsは50件までしか指定できない。
+    線の太さは値に比例する。市区町村・町丁目レベルの場合、pointsは50件までしか指定できない。
     """
     points = [MapPoint.model_validate(p) for p in points]
     _validate_map_points(level, points)
@@ -167,11 +172,6 @@ def render_spider(
 
 
 # --- 以下、地図ツールの内部ヘルパー(呼び出される側が下になるよう並べている) ---
-
-_LEVEL_FILES: dict[LevelName, tuple[str, str]] = {
-    "prefecture": ("japan_prefectures.geojson", "prefecture_points.json"),
-    "municipality": ("japan_municipalities.geojson", "municipality_points.json"),
-}
 
 
 @dataclass(frozen=True)
@@ -185,35 +185,38 @@ class _LevelData:
     points: dict[str, list[float]]
 
 
-def _load_level_data(geojson_filename: str, points_filename: str) -> _LevelData:
-    """dataディレクトリからGeoJSONと座標辞書を読み込む。"""
+def _load_level_data(level: LevelName) -> _LevelData:
+    """dataディレクトリからlevelのGeoJSON(都道府県ごとに分割済み)と座標辞書を読み込む。"""
     data_dir = Path(__file__).parent / "data"
+    features = []
+    for path in sorted((data_dir / level).glob("*.geojson")):
+        features.extend(json.loads(path.read_text())["features"])
     return _LevelData(
-        geojson=json.loads((data_dir / geojson_filename).read_text()),
-        points=json.loads((data_dir / points_filename).read_text()),
+        geojson={"type": "FeatureCollection", "features": features},
+        points=json.loads((data_dir / f"{level}_points.json").read_text()),
     )
 
 
 _LEVEL_DATA: dict[LevelName, _LevelData] = {
-    level: _load_level_data(*files) for level, files in _LEVEL_FILES.items()
+    level: _load_level_data(level) for level in get_args(LevelName)
 }
 
-_MUNICIPALITY_POINTS_LIMIT = 50
+_DETAILED_LEVEL_POINTS_LIMIT = 50
 
 
 def _validate_map_points(level: LevelName, points: list[MapPoint]) -> None:
     """MapPointのリストが空でなく、件数上限内で、重複がなく、すべて既知の地点かを検証する。"""
     if not points:
         raise ValueError("pointsが空です")
-    if level == "municipality" and len(points) > _MUNICIPALITY_POINTS_LIMIT:
+    if level != "prefecture" and len(points) > _DETAILED_LEVEL_POINTS_LIMIT:
         raise ValueError(
-            f"市区町村レベルで指定できるpointsは{_MUNICIPALITY_POINTS_LIMIT}件までです"
+            f"{level}レベルで指定できるpointsは{_DETAILED_LEVEL_POINTS_LIMIT}件までです"
             f"(指定件数: {len(points)})"
         )
     known = _LEVEL_DATA[level].points
     seen: set[str] = set()
     for point in points:
-        key = _point_key(level, point.prefecture, point.municipality)
+        key = _point_key(level, point.prefecture, point.municipality, point.town)
         if key not in known:
             raise ValueError(f"未知の地点です: {key}")
         if key in seen:
@@ -246,11 +249,11 @@ def _render_map_html(
 
 
 def _regions_geojson(level: LevelName, points: list[MapPoint]) -> dict:
-    """埋め込み用GeoJSONを返す。市区町村レベルはpointsに対応する地域のみへ絞り込む(全国約1,900件を毎回埋め込むとサイズ・描画負荷の両面で実用に耐えないため)。都道府県レベルは47件のみで軽量なため、値のない地域もグレー表示できるよう全国分をそのまま返す。"""
+    """埋め込み用GeoJSONを返す。市区町村・町丁目レベルはpointsに対応する地域のみへ絞り込む(全国分を毎回埋め込むとサイズ・描画負荷の両面で実用に耐えないため)。都道府県レベルは47件のみで軽量なため、値のない地域もグレー表示できるよう全国分をそのまま返す。"""
     level_data = _LEVEL_DATA[level]
     if level == "prefecture":
         return level_data.geojson
-    keys = {_point_key(level, p.prefecture, p.municipality) for p in points}
+    keys = {_point_key(level, p.prefecture, p.municipality, p.town) for p in points}
     return {
         "type": "FeatureCollection",
         "features": [
@@ -261,13 +264,23 @@ def _regions_geojson(level: LevelName, points: list[MapPoint]) -> dict:
 
 def _point_config(level: LevelName, point: MapPoint) -> dict:
     """MapPointを地図描画用のpoint設定(name/value/lon/lat)に変換する。"""
-    key = _point_key(level, point.prefecture, point.municipality)
+    key = _point_key(level, point.prefecture, point.municipality, point.town)
     lon, lat = _LEVEL_DATA[level].points[key]
     return {"name": key, "value": point.value, "lon": lon, "lat": lat}
 
 
-def _point_key(level: LevelName, prefecture: str, municipality: str | None) -> str:
+def _point_key(
+    level: LevelName, prefecture: str, municipality: str | None, town: str | None
+) -> str:
     """levelに応じてMapPointから座標辞書の検索キーを作る。"""
+    if level == "town":
+        if not municipality:
+            raise ValueError("levelが'town'の場合はmunicipalityの指定が必須です")
+        if not town:
+            raise ValueError("levelが'town'の場合はtownの指定が必須です")
+        return f"{prefecture}{municipality}{town}"
+    if town:
+        raise ValueError(f"levelが'town'以外の場合はtownを指定できません: {town}")
     if level == "municipality":
         if not municipality:
             raise ValueError(
