@@ -27,7 +27,7 @@
     <div id="map"></div>
     <div id="tooltip"></div>
     <script>
-      const geojson = {{prefectures_geojson}};
+      const geojson = {{regions_geojson}};
       const config = {{map_config}};
       const valueByName = new Map(config.points.map((p) => [p.name, p.value]));
 
@@ -37,15 +37,21 @@
         maxZoom: 18,
       }).addTo(map);
 
-      const prefectureLayer = drawPrefectures();
-      map.fitBounds(prefectureLayer.getBounds(), { padding: [16, 16] });
+      const regionLayer = drawRegions();
+      const bounds = regionLayer.getBounds();
+      if (config.mode === 'spider') {
+        // 起点は行政区画の外にある場合があるため、境界に含めてから表示範囲を決める
+        bounds.extend(L.latLng(config.origin[1], config.origin[0]));
+      }
+      map.fitBounds(bounds, { padding: [16, 16] });
 
+      // 線・マーカーは表示範囲(view)確定後に追加する(view未確定のまま追加すると描画が崩れるため)
       if (config.mode === 'spider') {
         const lineByName = drawFlowLines();
-        linkPolygonAndLineHover(prefectureLayer, lineByName);
+        linkPolygonAndLineHover(regionLayer, lineByName);
       }
 
-      function drawPrefectures() {
+      function drawRegions() {
         const colorScale = makeColorScale(config.valueMin, config.valueMax, '#fce4d6', '#eb6834');
 
         return L.geoJSON(geojson, {
@@ -92,8 +98,8 @@
       }
 
       // ポリゴンhoverと線hoverを連動させ、どちらをホバーしても同じ吹き出し・強調が出るようにする
-      function linkPolygonAndLineHover(prefectureLayer, lineByName) {
-        prefectureLayer.eachLayer((layer) => {
+      function linkPolygonAndLineHover(regionLayer, lineByName) {
+        regionLayer.eachLayer((layer) => {
           const name = layer.feature.properties.name;
           layer.on('mouseover', () => highlight(name));
           layer.on('mouseout', () => highlight(null));
