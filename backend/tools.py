@@ -175,15 +175,16 @@ def render_choropleth(level: LevelName, points: list[MapPoint]) -> str:
 
 
 @tool
-def render_spider(origin: str, points: list[MapPoint]) -> str:
-    """起点となる都道府県から、各都道府県への流動線を地図上に描く。線の太さは値に比例する。"""
+def render_spider(
+    level: LevelName, origin_lat: float, origin_lon: float, points: list[MapPoint]
+) -> str:
+    """起点となる緯度経度から、指定レベル(都道府県 or 市区町村)の各地点への流動線を地図上に描く。線の太さは値に比例する。市区町村レベルの場合、pointsは50件までしか指定できない。"""
     points = [MapPoint.model_validate(p) for p in points]
-    _validate_map_points(points)
-    if origin not in _PREFECTURE_POINTS:
-        raise ValueError(f"未知の都道府県名です: {origin}")
+    _validate_map_points(level, points)
 
-    dest_points = [p for p in points if p.prefecture != origin]
-    return _render_map_html(mode="spider", points=dest_points, origin=origin)
+    return _render_map_html(
+        mode="spider", level=level, points=points, origin=(origin_lon, origin_lat)
+    )
 
 
 _MUNICIPALITY_POINTS_LIMIT = 50
