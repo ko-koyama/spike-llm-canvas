@@ -38,8 +38,14 @@
       }).addTo(map);
 
       const regionLayer = drawRegions();
-      map.fitBounds(regionLayer.getBounds(), { padding: [16, 16] });
+      const bounds = regionLayer.getBounds();
+      if (config.mode === 'spider') {
+        // 起点は行政区画の外にある場合があるため、境界に含めてから表示範囲を決める
+        bounds.extend(L.latLng(config.origin[1], config.origin[0]));
+      }
+      map.fitBounds(bounds, { padding: [16, 16] });
 
+      // 線・マーカーは表示範囲(view)確定後に追加する(view未確定のまま追加すると描画が崩れるため)
       if (config.mode === 'spider') {
         const lineByName = drawFlowLines();
         linkPolygonAndLineHover(regionLayer, lineByName);
