@@ -4,7 +4,7 @@
 .superpowers/
 
 # e-Statから手動ダウンロードした境界データの元データ(ビルド時のみ使用、サイズが大きいためコミットしない)
-reference/shapefile/
+shapefile/
 
 # Python
 __pycache__/
