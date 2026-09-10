@@ -1,6 +1,7 @@
 """Agentに渡すツール定義。"""
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
@@ -11,12 +12,34 @@ from storage import upload_html
 
 _CHART_TEMPLATE = (Path(__file__).parent / "templates" / "chart.html").read_text()
 _MAP_TEMPLATE = (Path(__file__).parent / "templates" / "map_leaflet.html").read_text()
-_PREFECTURES_GEOJSON = (
-    Path(__file__).parent / "data" / "japan_prefectures.geojson"
-).read_text()
-_PREFECTURE_POINTS: dict[str, list[float]] = json.loads(
-    (Path(__file__).parent / "data" / "prefecture_points.json").read_text()
-)
+LevelName = Literal["prefecture", "municipality"]
+
+_LEVEL_FILES: dict[LevelName, tuple[str, str]] = {
+    "prefecture": ("japan_prefectures.geojson", "prefecture_points.json"),
+    "municipality": ("japan_municipalities.geojson", "municipality_points.json"),
+}
+
+
+@dataclass(frozen=True)
+class _LevelData:
+    """levelごとの地図データ(パース済みGeoJSON FeatureCollectionと地点名→座標の辞書)。"""
+
+    geojson: dict
+    points: dict[str, list[float]]
+
+
+def _load_level_data(geojson_filename: str, points_filename: str) -> _LevelData:
+    """dataディレクトリからGeoJSONと座標辞書を読み込む。"""
+    data_dir = Path(__file__).parent / "data"
+    return _LevelData(
+        geojson=json.loads((data_dir / geojson_filename).read_text()),
+        points=json.loads((data_dir / points_filename).read_text()),
+    )
+
+
+_LEVEL_DATA: dict[LevelName, _LevelData] = {
+    level: _load_level_data(*files) for level, files in _LEVEL_FILES.items()
+}
 
 # 系列カラー未指定時のデフォルト配色
 _DEFAULT_SERIES_COLORS = [
@@ -129,19 +152,26 @@ def render_chart(
 
 
 class MapPoint(BaseModel):
-    """地図上の1地点(都道府県名で指定)。"""
+    """地図上の1地点。"""
 
     prefecture: str  # 都道府県名(例: "東京都")。47都道府県の名称と完全一致させる
+    municipality: str | None = Field(
+        default=None,
+        description=(
+            "市区町村名。levelが'municipality'の場合のみ指定する(例: '府中市')。"
+            "政令指定都市の区を指定する場合は区名まで含める(例: '横浜市中区')"
+        ),
+    )
     value: float | None = None  # 塗り分けの濃淡、および流動線の太さに使う数値
 
 
 @tool
-def render_choropleth(points: list[MapPoint]) -> str:
-    """都道府県単位の数値を地図上に塗り分け表示する。"""
+def render_choropleth(level: LevelName, points: list[MapPoint]) -> str:
+    """指定レベル(都道府県 or 市区町村)の単位で数値を地図上に塗り分け表示する。市区町村レベルの場合、pointsは50件までしか指定できない。"""
     points = [MapPoint.model_validate(p) for p in points]
-    _validate_map_points(points)
+    _validate_map_points(level, points)
 
-    return _render_map_html(mode="choropleth", points=points)
+    return _render_map_html(mode="choropleth", level=level, points=points)
 
 
 @tool
@@ -156,38 +186,72 @@ def render_spider(origin: str, points: list[MapPoint]) -> str:
     return _render_map_html(mode="spider", points=dest_points, origin=origin)
 
 
-def _validate_map_points(points: list[MapPoint]) -> None:
-    """MapPointのリストが空でなく、すべて既知の都道府県名かを検証する。"""
+_MUNICIPALITY_POINTS_LIMIT = 50
+
+
+def _point_key(level: LevelName, prefecture: str, municipality: str | None) -> str:
+    """levelに応じてMapPointから座標辞書の検索キーを作る。"""
+    if level == "municipality":
+        if not municipality:
+            raise ValueError("levelが'municipality'の場合はmunicipalityの指定が必須です")
+        return f"{prefecture}{municipality}"
+    return prefecture
+
+
+def _validate_map_points(level: LevelName, points: list[MapPoint]) -> None:
+    """MapPointのリストが空でなく、件数上限内で、すべて既知の地点かを検証する。"""
     if not points:
         raise ValueError("pointsが空です")
+    if level == "municipality" and len(points) > _MUNICIPALITY_POINTS_LIMIT:
+        raise ValueError(
+            f"市区町村レベルで指定できるpointsは{_MUNICIPALITY_POINTS_LIMIT}件までです(指定件数: {len(points)})"
+        )
+    known = _LEVEL_DATA[level].points
     for point in points:
-        if point.prefecture not in _PREFECTURE_POINTS:
-            raise ValueError(f"未知の都道府県名です: {point.prefecture}")
+        key = _point_key(level, point.prefecture, point.municipality)
+        if key not in known:
+            raise ValueError(f"未知の地点です: {key}")
+
+
+def _point_config(level: LevelName, point: MapPoint) -> dict:
+    """MapPointを地図描画用のpoint設定(name/value/lon/lat)に変換する。"""
+    key = _point_key(level, point.prefecture, point.municipality)
+    lon, lat = _LEVEL_DATA[level].points[key]
+    return {"name": key, "value": point.value, "lon": lon, "lat": lat}
+
+
+def _regions_geojson(level: LevelName, points: list[MapPoint]) -> dict:
+    """埋め込み用GeoJSONを返す。市区町村レベルはpointsに対応する地域のみへ絞り込む(全国約1,900件を毎回埋め込むとサイズ・描画負荷の両面で実用に耐えないため)。都道府県レベルは47件のみで軽量なため、値のない地域もグレー表示できるよう全国分をそのまま返す。"""
+    level_data = _LEVEL_DATA[level]
+    if level == "prefecture":
+        return level_data.geojson
+    keys = {_point_key(level, p.prefecture, p.municipality) for p in points}
+    return {
+        "type": "FeatureCollection",
+        "features": [
+            f for f in level_data.geojson["features"] if f["properties"]["name"] in keys
+        ],
+    }
 
 
 def _render_map_html(
     mode: Literal["choropleth", "spider"],
+    level: LevelName,
     points: list[MapPoint],
-    origin: str | None = None,
+    origin: tuple[float, float] | None = None,
 ) -> str:
     """地図描画用の設定をLeafletのmapテンプレートに埋め込みHTML文字列にする。"""
     values = [p.value for p in points if p.value is not None]
     config = {
         "mode": mode,
-        "points": [
-            {
-                "name": p.prefecture,
-                "value": p.value,
-                "lon": _PREFECTURE_POINTS[p.prefecture][0],
-                "lat": _PREFECTURE_POINTS[p.prefecture][1],
-            }
-            for p in points
-        ],
-        "origin": _PREFECTURE_POINTS[origin] if origin else None,
+        "points": [_point_config(level, p) for p in points],
+        "origin": [origin[0], origin[1]] if origin else None,
         "valueMin": min(values) if values else 0.0,
         "valueMax": max(values) if values else 0.0,
     }
 
-    html = _MAP_TEMPLATE.replace("{{prefectures_geojson}}", _PREFECTURES_GEOJSON)
+    html = _MAP_TEMPLATE.replace(
+        "{{regions_geojson}}", json.dumps(_regions_geojson(level, points), ensure_ascii=False)
+    )
     html = html.replace("{{map_config}}", json.dumps(config))
     return upload_html(html)
