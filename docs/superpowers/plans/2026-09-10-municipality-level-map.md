@@ -28,128 +28,83 @@
 
 ### Task 1: ビルドスクリプトのlevel対応化(GeoJSON生成)
 
+> **状況:** このタスクは実施中に2回設計変更が入っている。
+> 1. 1回目のコミット(`ef37c1f`)後、簡略化(`-simplify`)が効かず都道府県71KB想定が3.5MB・市区町村が173MBに肥大化する不具合が見つかり、`-clean`をdissolve直後に置く・簡略化率を下げる、で修正した(`83fddfd`。都道府県71KB、市区町村2.6MB)。
+> 2. その後、MLIT N03には政令指定都市の区(例: 横浜市中区)の境界が独立ポリゴンとして存在しないことが判明し、市区町村レベルのデータソースをe-Stat「令和2年国勢調査 小地域集計」境界データ(ユーザーが手動ダウンロードし`shapefile/`直下にzipのまま配置)に変更することになった。あわせて、Task 3で「市区町村レベルは常に選択された地域(最大50件)のみをHTMLに埋め込む」設計に変更されたため、全国分のファイルサイズを厳しく詰める必要はなくなった。ただし個々のポリゴンの頂点数が異常に多くならないよう、軽い簡略化は残す。
+>
+> **`prefecture`ブランチは`83fddfd`で完了済み・動作確認済みのため変更不要。** 以下のStepは`municipality`ブランチの書き直しのみを対象とする。
+
 **Files:**
-- Delete: `scripts/build_prefecture_geojson.sh`
-- Create: `scripts/build_geojson.sh`
-- Create (スクリプト実行結果): `backend/data/japan_prefectures.geojson`(再生成・上書き)
-- Create (スクリプト実行結果): `backend/data/japan_municipalities.geojson`(新規)
+- Modify: `scripts/build_geojson.sh`(`municipality`ブランチをe-Stat由来の生成ロジックに書き換える。`prefecture`ブランチは変更しない)
+- Create (スクリプト実行結果): `backend/data/japan_municipalities.geojson`(再生成)
 
 **Interfaces:**
-- Produces: `scripts/build_geojson.sh <level> [year]`(`level`は`prefecture`|`municipality`、`year`省略時`2026`)。実行すると`backend/data/japan_prefectures.geojson`または`backend/data/japan_municipalities.geojson`を生成する
-- Produces: 生成されるGeoJSONの各featureは`properties = {"name": <地域名文字列>}`のみを持つ(都道府県レベルは`"東京都"`、市区町村レベルは`"東京都府中市"`のように都道府県名+市区町村名を連結した文字列)
+- Produces: `scripts/build_geojson.sh municipality`実行で`backend/data/japan_municipalities.geojson`を生成する(featureは`properties = {"name": "<都道府県名><市区町村名>"}`。政令指定都市は区名まで含む。例: `"神奈川県横浜市中区"`)
+- Consumes: リポジトリ直下`shapefile/`配下にユーザーが手動配置したe-Statのzip(または展開済みディレクトリ)。現時点では動作確認用に北海道分(`shapefile/A002005212020DDSWC01/`)のみ配置されている。残り46都道府県は後日ユーザーが追加する想定。スクリプトは`shapefile/`配下に存在するファイルだけを対象に処理する(全部揃っていなくても実行はできる)
 
-- [ ] **Step 1: 既存スクリプトを削除し、新しい共通スクリプトを作成する**
+- [ ] **Step 1: `scripts/build_geojson.sh`の`municipality`ブランチを書き換える**
 
-`scripts/build_prefecture_geojson.sh`を削除し、代わりに`scripts/build_geojson.sh`を作成する。
+現在の`case "$LEVEL" in ... municipality) ... ;; esac`ブロックのうち`municipality)`の中身を、以下に置き換える(`prefecture)`ブロックと末尾の地域名組み立て・代表点生成部分は変更しない)。
 
 ```bash
-#!/usr/bin/env bash
-set -euo pipefail
-
-# MLIT国土数値情報(N03, 行政区域データ)の一次ソースから
-# levelに応じた行政区画単位(都道府県 or 市区町村)に統合・簡略化したGeoJSONを生成するビルドスクリプト。
-# 実行時には関与しない、ビルド時のみのツール。
-
-LEVEL="${1:?levelを指定してください(prefecture|municipality)}"
-YEAR="${2:-2026}"
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-WORKDIR="$(mktemp -d)"
-trap 'rm -rf "$WORKDIR"' EXIT
-
-case "$LEVEL" in
-  prefecture)
-    DISSOLVE_FIELDS="N03_001"
-    SIMPLIFY_PCT="2%"
-    OUT_FILE="${REPO_ROOT}/backend/data/japan_prefectures.geojson"
-    ;;
   municipality)
-    DISSOLVE_FIELDS="N03_001,N03_003,N03_004"
-    SIMPLIFY_PCT="5%"
+    DISSOLVE_FIELDS="PREF_NAME,CITY_NAME"
     OUT_FILE="${REPO_ROOT}/backend/data/japan_municipalities.geojson"
+    POINTS_FILE="${REPO_ROOT}/backend/data/municipality_points.json"
+    SHAPE_DIR="${REPO_ROOT}/shapefile"
+
+    if [ ! -d "$SHAPE_DIR" ] || [ -z "$(find "$SHAPE_DIR" \( -name '*.zip' -o -name '*.shp' \) -print -quit)" ]; then
+      echo "${SHAPE_DIR}/にe-Statの境界データ(zip)が見つかりません。READMEを参照して手動配置してください" >&2
+      exit 1
+    fi
+
+    EXTRACT_DIR="${WORKDIR}/extracted"
+    mkdir -p "$EXTRACT_DIR"
+
+    echo "==> shapefile/配下のzipを展開中..."
+    find "$SHAPE_DIR" -name '*.zip' -print0 | while IFS= read -r -d '' zip; do
+      python3 -m zipfile -e "$zip" "$EXTRACT_DIR"
+    done
+
+    echo "==> shapefile/配下の展開済みshpをリンク中..."
+    find "$SHAPE_DIR" -name '*.shp' -print0 | while IFS= read -r -d '' shp; do
+      base="${shp%.shp}"
+      for ext in shp shx dbf prj cpg; do
+        [ -f "${base}.${ext}" ] && ln -sf "${base}.${ext}" "${EXTRACT_DIR}/"
+      done
+    done
+
+    SHP_COUNT=$(find "$EXTRACT_DIR" -name '*.shp' | wc -l)
+    echo "==> ${SHP_COUNT}件のshapefileを検出しました(全国47件推奨。不足分は未収録のまま生成されます)"
+
+    echo "==> mapshaperで市区町村(政令指定都市の区を含む)単位に統合・簡略化中..."
+    npx --yes mapshaper "${EXTRACT_DIR}"/*.shp combine-files \
+      -proj wgs84 \
+      -dissolve2 fields="$DISSOLVE_FIELDS" \
+      -clean \
+      -simplify dp 10% keep-shapes \
+      -clean \
+      -o format=geojson precision=0.0001 "$DISSOLVED"
     ;;
-  *)
-    echo "不明なlevelです: ${LEVEL} (prefecture|municipalityを指定してください)" >&2
-    exit 1
-    ;;
-esac
-
-echo "==> N03-${YEAR}をダウンロード中..."
-curl -L -o "${WORKDIR}/N03.zip" \
-  "https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-${YEAR}/N03-${YEAR}0101_GML.zip"
-
-echo "==> 展開中..."
-python3 -m zipfile -e "${WORKDIR}/N03.zip" "${WORKDIR}/N03"
-
-SHP="$(find "${WORKDIR}/N03" -name '*.shp' ! -name '*_prefecture.shp' | sort | head -1)"
-if [ -z "$SHP" ]; then
-  echo "shapefileが見つかりませんでした" >&2
-  exit 1
-fi
-
-echo "==> mapshaperで${LEVEL}単位に統合・簡略化中..."
-mkdir -p "${REPO_ROOT}/backend/data"
-DISSOLVED="${WORKDIR}/dissolved.geojson"
-npx --yes mapshaper "$SHP" \
-  -proj wgs84 \
-  -dissolve2 fields="$DISSOLVE_FIELDS" \
-  -simplify dp 0.3% keep-shapes \
-  -simplify dp "$SIMPLIFY_PCT" keep-shapes \
-  -clean \
-  -o format=geojson precision=0.0001 "$DISSOLVED"
-
-echo "==> 地域名(name)を組み立て中..."
-python3 - "$DISSOLVED" "$OUT_FILE" "$DISSOLVE_FIELDS" <<'PYEOF'
-import json
-import sys
-
-in_path, out_path, fields_csv = sys.argv[1], sys.argv[2], sys.argv[3]
-fields = fields_csv.split(",")
-
-data = json.load(open(in_path))
-for feature in data["features"]:
-    props = feature["properties"]
-    name = "".join(props.get(f) or "" for f in fields)
-    feature["properties"] = {"name": name}
-
-json.dump(data, open(out_path, "w"), ensure_ascii=False)
-
-names = sorted(f["properties"]["name"] for f in data["features"])
-print(f"features: {len(names)}")
-print(names)
-PYEOF
-
-echo "==> 生成完了: ${OUT_FILE}"
-wc -c "$OUT_FILE"
 ```
 
-- [ ] **Step 2: 実行権限を付与する**
+`DISSOLVED`変数は既存の`prefecture`ブロックと共有する(スクリプト冒頭で`DISSOLVED="${WORKDIR}/dissolved.geojson"`として定義済みのはず。定義されていなければ`case`文の直前に追加する)。
 
-```bash
-chmod +x scripts/build_geojson.sh
-```
-
-- [ ] **Step 3: 都道府県レベルを再生成し、既存データと矛盾がないか確認する**
-
-```bash
-./scripts/build_geojson.sh prefecture
-```
-
-Expected: `features: 47`と表示され、都道府県名一覧が出力される。`git diff --stat backend/data/japan_prefectures.geojson`で差分を確認し、featureの内容(座標)が大きく変わっていない(同じ生成ロジックのため実質同一になるはず)ことを確認する。
-
-- [ ] **Step 4: 市区町村レベルを生成する**
+- [ ] **Step 2: 動作確認用に配置済みの北海道データで実行する**
 
 ```bash
 ./scripts/build_geojson.sh municipality
 ```
 
-Expected: `features:`が概ね1,700〜1,900件程度(政令指定都市の区を含む市区町村数に相当)と表示される。出力の地域名一覧に`"東京都府中市"`, `"横浜市中区"`のような名称が含まれることを確認する。
+Expected: `1件のshapefileを検出しました`のようなログの後、`features: <北海道内の市区町村数(180前後)>`が出力され、地域名一覧に`"北海道札幌市中央区"`のような区名を含む名称が確認できること(区ごとに別featureになっていること)。生成される`backend/data/japan_municipalities.geojson`のサイズを`wc -c`で確認し、数百KB〜数MB程度(異常に大きくない)であることを確認する。
 
-- [ ] **Step 5: コミットする**
+- [ ] **Step 3: コミットする**
+
+北海道1県分のみだが、スクリプトの動作確認は完了しているため一旦コミットする(残り46都道府県分は`shapefile/`にユーザーが追加後、同じコマンドを再実行すれば`backend/data/japan_municipalities.geojson`が全国分に更新される。これは実装計画の対象外の後日作業とする)。
 
 ```bash
-git add scripts/build_geojson.sh backend/data/japan_prefectures.geojson backend/data/japan_municipalities.geojson
-git rm scripts/build_prefecture_geojson.sh
-git commit -m "feat: 市区町村レベルGeoJSON生成に対応"
+git add scripts/build_geojson.sh backend/data/japan_municipalities.geojson
+git commit -m "feat: 市区町村データをe-Stat境界データに変更"
 ```
 
 ---
@@ -283,6 +238,7 @@ git commit -m "feat: 代表点座標を重心から自動生成"
 - Produces: `MapPoint(prefecture: str, municipality: str | None, value: float | None)`
 - Produces: `_point_key(level: LevelName, prefecture: str, municipality: str | None) -> str`
 - Produces: `_validate_map_points(level: LevelName, points: list[MapPoint]) -> None`
+- Produces: `_regions_geojson(level: LevelName, points: list[MapPoint]) -> dict`(市区町村レベルはpointsの地域だけに絞り込んだFeatureCollection、都道府県レベルは全国分をそのまま返す)
 - Produces: `_render_map_html(mode: Literal["choropleth", "spider"], level: LevelName, points: list[MapPoint], origin: tuple[float, float] | None = None) -> str`
 - Produces: `render_choropleth(level: LevelName, points: list[MapPoint]) -> str`(Task 4で`render_spider`が同じ`_validate_map_points`/`_render_map_html`を使う)
 
@@ -314,9 +270,9 @@ _LEVEL_FILES: dict[LevelName, tuple[str, str]] = {
 
 @dataclass(frozen=True)
 class _LevelData:
-    """levelごとの地図データ(GeoJSON文字列と地点名→座標の辞書)。"""
+    """levelごとの地図データ(パース済みGeoJSON FeatureCollectionと地点名→座標の辞書)。"""
 
-    geojson: str
+    geojson: dict
     points: dict[str, list[float]]
 
 
@@ -324,7 +280,7 @@ def _load_level_data(geojson_filename: str, points_filename: str) -> _LevelData:
     """dataディレクトリからGeoJSONと座標辞書を読み込む。"""
     data_dir = Path(__file__).parent / "data"
     return _LevelData(
-        geojson=(data_dir / geojson_filename).read_text(),
+        geojson=json.loads((data_dir / geojson_filename).read_text()),
         points=json.loads((data_dir / points_filename).read_text()),
     )
 
@@ -402,6 +358,20 @@ def _point_config(level: LevelName, point: MapPoint) -> dict:
     return {"name": key, "value": point.value, "lon": lon, "lat": lat}
 
 
+def _regions_geojson(level: LevelName, points: list[MapPoint]) -> dict:
+    """埋め込み用GeoJSONを返す。市区町村レベルはpointsに対応する地域のみへ絞り込む(全国約1,900件を毎回埋め込むとサイズ・描画負荷の両面で実用に耐えないため)。都道府県レベルは47件のみで軽量なため、値のない地域もグレー表示できるよう全国分をそのまま返す。"""
+    level_data = _LEVEL_DATA[level]
+    if level == "prefecture":
+        return level_data.geojson
+    keys = {_point_key(level, p.prefecture, p.municipality) for p in points}
+    return {
+        "type": "FeatureCollection",
+        "features": [
+            f for f in level_data.geojson["features"] if f["properties"]["name"] in keys
+        ],
+    }
+
+
 def _render_map_html(
     mode: Literal["choropleth", "spider"],
     level: LevelName,
@@ -409,7 +379,6 @@ def _render_map_html(
     origin: tuple[float, float] | None = None,
 ) -> str:
     """地図描画用の設定をLeafletのmapテンプレートに埋め込みHTML文字列にする。"""
-    level_data = _LEVEL_DATA[level]
     values = [p.value for p in points if p.value is not None]
     config = {
         "mode": mode,
@@ -419,7 +388,9 @@ def _render_map_html(
         "valueMax": max(values) if values else 0.0,
     }
 
-    html = _MAP_TEMPLATE.replace("{{regions_geojson}}", level_data.geojson)
+    html = _MAP_TEMPLATE.replace(
+        "{{regions_geojson}}", json.dumps(_regions_geojson(level, points), ensure_ascii=False)
+    )
     html = html.replace("{{map_config}}", json.dumps(config))
     return upload_html(html)
 ```
@@ -443,7 +414,7 @@ def _render_map_html(
 ```bash
 cd backend
 uv run python -c "
-from tools import MapPoint, _validate_map_points, _render_map_html
+from tools import MapPoint, _validate_map_points, _render_map_html, _regions_geojson
 
 # 正常系: 都道府県レベル
 _validate_map_points('prefecture', [MapPoint(prefecture='東京都', value=1.0)])
@@ -471,6 +442,17 @@ try:
     print('NG: 例外が発生しなかった')
 except ValueError as e:
     print(f'OK: {e}')
+
+# 正常系: 市区町村レベルは埋め込みGeoJSONがpointsの地域だけに絞り込まれること
+filtered = _regions_geojson('municipality', points)
+assert len(filtered['features']) == len(points), f'絞り込み件数が一致しない: {len(filtered[\"features\"])}'
+print('OK: municipalityは', len(filtered['features']), '件に絞り込み')
+
+# 正常系: 都道府県レベルは全国分がそのまま埋め込まれること(絞り込まない)
+pref_points = [MapPoint(prefecture='東京都', value=1.0)]
+full = _regions_geojson('prefecture', pref_points)
+assert len(full['features']) == 47, f'都道府県は絞り込まれないはずが{len(full[\"features\"])}件だった'
+print('OK: prefectureは全国47件のまま')
 
 # 正常系: render_choropleth相当(_validate_map_points + _render_map_html)でHTML生成までできること(S3設定済みであること)
 key = _render_map_html(mode='choropleth', level='municipality', points=points)
@@ -591,6 +573,9 @@ git commit -m "feat: spiderの起点を緯度経度指定に変更"
 
 ```
 - `backend/data/japan_{prefectures,municipalities}.geojson`・`{prefecture,municipality}_points.json`は`scripts/build_geojson.sh <level>`で生成した行政区画ポリゴン・代表点データ(生成手順はスクリプト内コメント参照)
+- 市区町村レベル(`municipality`)のデータ生成には、e-Stat「令和2年国勢調査 小地域集計」境界データが必要
+  - https://www.e-stat.go.jp/gis/statmap-search?page=1&type=2&aggregateUnitForBoundary=A&toukeiCode=00200521&toukeiYear=2020&serveyId=A002005212020&datum=2000 から都道府県ごとにダウンロード(形式: shapefile、座標系: 世界測地系緯度経度)
+  - ダウンロードしたzip(リネーム不要)をリポジトリ直下の`shapefile/`に配置してから`./scripts/build_geojson.sh municipality`を実行する(`shapefile/`は`.gitignore`対象でコミットしない)
 ```
 
 に変更する。
@@ -619,9 +604,11 @@ npm run dev
 
 `http://localhost:5173`をPlaywrightで開き、チャット欄から以下をそれぞれ送信し、右ペインに地図が表示され、市区町村単位/都道府県単位で正しく塗り分け・流動線が描画されることをスクリーンショットで確認する。
 
-1. 「東京都府中市、国立市、横浜市中区の人口をそれぞれ100、80、200としてコロプレスマップで表示して」→ 市区町村単位で塗り分けられること
-2. 「東京駅(緯度35.6812、経度139.7671)を起点に、東京都府中市へ10、横浜市中区へ20の値でスパイダーマップを描いて」→ 起点マーカーが東京駅付近に表示され、各市区町村へ線が引かれること
-3. 「北海道、東京都、大阪府、沖縄県の人口をそれぞれ500、1400、880、150としてコロプレスマップで表示して」→ 都道府県レベルが既存通り動作すること(回帰確認)。沖縄県のポリゴンが正しい位置(南西諸島)に表示されていることを確認する
+この時点で`shapefile/`には動作確認用に北海道分のみ配置されている想定のため、市区町村レベルの確認は北海道内の市区町村(政令指定都市札幌市の区を含む)で行う。全都道府県分が揃ったら、他地域でも同様に確認すること(このタスクの範囲外の後日作業でよい)。
+
+1. 「北海道札幌市中央区、札幌市北区、旭川市の人口をそれぞれ100、80、200としてコロプレスマップで表示して」→ 市区町村単位(政令指定都市の区を含む)で塗り分けられ、指定した3地域以外の行政境界は表示されないこと(絞り込み挙動の確認)
+2. 「札幌駅(緯度43.0686、経度141.3507)を起点に、札幌市中央区へ10、札幌市北区へ20の値でスパイダーマップを描いて」→ 起点マーカーが札幌駅付近に表示され、各区へ線が引かれること
+3. 「北海道、東京都、大阪府、沖縄県の人口をそれぞれ500、1400、880、150としてコロプレスマップで表示して」→ 都道府県レベルが既存通り動作すること(回帰確認)。全国47都道府県の境界が表示され、沖縄県のポリゴンが正しい位置(南西諸島)に表示されていることを確認する
 
 Expected: 3ケースすべてで地図が正しく描画され、コンソールエラーが出ていないこと。問題があれば該当タスクに戻って修正する。
 
@@ -630,5 +617,6 @@ Expected: 3ケースすべてで地図が正しく描画され、コンソール
 ## Self-Review Notes
 
 - 設計書の各セクション(ビルドスクリプト共通化・`MapPoint`拡張・`origin`の緯度経度化・levelごとのデータ読み込み・テンプレート汎用化・スコープ外項目)はTask 1〜5でそれぞれカバーしている
-- 型・関数名の一貫性: `LevelName`, `MapPoint`, `_point_key`, `_validate_map_points`, `_render_map_html`, `_point_config`はTask 3で定義し、Task 4はそれをそのまま再利用している(シグネチャの齟齬なし)
+- 型・関数名の一貫性: `LevelName`, `MapPoint`, `_point_key`, `_validate_map_points`, `_regions_geojson`, `_render_map_html`, `_point_config`はTask 3で定義し、Task 4はそれをそのまま再利用している(シグネチャの齟齬なし)
+- データソース変更(N03→e-Stat)・GeoJSON絞り込み・50件上限は会話の途中で追加された決定であり、当初の設計書(`docs/superpowers/specs/2026-09-10-municipality-level-map-design.md`)を更新した上で本計画に反映している
 - テストはCLAUDE.mdの方針と異なり本機能でも追加しない(ユーザー承認済み)。代わりに各タスクに具体的な手動確認コマンド・Playwrightでの確認手順を明記した
