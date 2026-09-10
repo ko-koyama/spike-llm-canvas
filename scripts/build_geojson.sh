@@ -18,6 +18,7 @@ case "$LEVEL" in
     DISSOLVE_FIELDS="N03_001"
     SIMPLIFY_PCT="0.02%"
     OUT_FILE="${REPO_ROOT}/backend/data/japan_prefectures.geojson"
+    POINTS_FILE="${REPO_ROOT}/backend/data/prefecture_points.json"
     ;;
   municipality)
     DISSOLVE_FIELDS="PREF_NAME,CITY_NAME"
@@ -114,3 +115,7 @@ PYEOF
 
 echo "==> 生成完了: ${OUT_FILE}"
 wc -c "$OUT_FILE"
+
+echo "==> 代表点座標を計算中..."
+uv run --project "${REPO_ROOT}/backend" python "${REPO_ROOT}/scripts/generate_points.py" "$OUT_FILE" "$POINTS_FILE"
+echo "==> 生成完了: ${POINTS_FILE}"

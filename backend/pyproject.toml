@@ -16,6 +16,7 @@ package = false
 [dependency-groups]
 dev = [
     "ruff>=0.16.5",
+    "shapely>=2.1.2",
 ]
 
 [tool.ruff.lint]
