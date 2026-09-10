@@ -431,22 +431,23 @@ def _render_map_html(
 
 - [ ] **Step 6: バリデーション・描画ロジックを手動確認する**
 
-`render_spider`はまだ未対応(Task 4)のため、`_validate_map_points`・`_render_map_html`・`render_choropleth`のみをコード内から直接呼び出して確認する。`backend/`ディレクトリで以下を実行する(事前に`export VIZ_S3_BUCKET=spike-llm-canvas-viz`などREADMEの手順でS3設定を済ませておく)。
+`render_spider`はまだ未対応(Task 4)のため、`_validate_map_points`・`_render_map_html`のみをコード内から直接呼び出して確認する。`render_choropleth`自体は`@tool`デコレータ付きでstrandsのAgent実行系を前提にしており、Pythonから素で呼び出せる保証がないため、ここでは同じロジックを持つ非デコレータのヘルパー(`_validate_map_points`・`_render_map_html`)を直接呼ぶことで代替する(`render_choropleth`本体はこの2つを呼ぶだけの薄いラッパーなので、これで実質的なロジックはカバーできる)。`backend/`ディレクトリで以下を実行する(事前に`export VIZ_S3_BUCKET=spike-llm-canvas-viz`などREADMEの手順でS3設定を済ませておく)。
 
 ```bash
 cd backend
 uv run python -c "
-from tools import MapPoint, render_choropleth, _validate_map_points
+from tools import MapPoint, _validate_map_points, _render_map_html
 
 # 正常系: 都道府県レベル
 _validate_map_points('prefecture', [MapPoint(prefecture='東京都', value=1.0)])
 print('OK: prefecture正常系')
 
 # 正常系: 市区町村レベル(政令指定都市の区を含む)
-_validate_map_points('municipality', [
+points = [
     MapPoint(prefecture='東京都', municipality='府中市', value=1.0),
     MapPoint(prefecture='神奈川県', municipality='横浜市中区', value=2.0),
-])
+]
+_validate_map_points('municipality', points)
 print('OK: municipality正常系')
 
 # 準正常系: 未知の市区町村名
@@ -456,12 +457,9 @@ try:
 except ValueError as e:
     print(f'OK: {e}')
 
-# 正常系: render_choropleth経由でHTML生成までできること(S3設定済みであること)
-key = render_choropleth(level='municipality', points=[
-    MapPoint(prefecture='東京都', municipality='府中市', value=1.0),
-    MapPoint(prefecture='東京都', municipality='国立市', value=2.0),
-])
-print('OK: render_choropleth ->', key)
+# 正常系: render_choropleth相当(_validate_map_points + _render_map_html)でHTML生成までできること(S3設定済みであること)
+key = _render_map_html(mode='choropleth', level='municipality', points=points)
+print('OK: _render_map_html ->', key)
 "
 ```
 
@@ -507,33 +505,27 @@ def render_spider(
 
 - [ ] **Step 2: 動作確認する**
 
-`backend/`ディレクトリで以下を実行する。
+`render_spider`も`@tool`デコレータ付きのためPythonから素で呼び出せる保証がなく、ここでも同じロジックを持つ非デコレータのヘルパー(`_validate_map_points`・`_render_map_html`)を直接呼ぶことで代替する(`render_spider`本体はこの2つを`mode="spider"`・`origin=(origin_lon, origin_lat)`で呼ぶだけの薄いラッパー)。`backend/`ディレクトリで以下を実行する。
 
 ```bash
 cd backend
 uv run python -c "
-from tools import MapPoint, render_spider
+from tools import MapPoint, _validate_map_points, _render_map_html
 
-# 正常系: 施設(緯度経度)を起点にした市区町村レベルのスパイダーマップ
-key = render_spider(
-    level='municipality',
-    origin_lat=35.6812,
-    origin_lon=139.7671,
-    points=[
-        MapPoint(prefecture='東京都', municipality='府中市', value=10.0),
-        MapPoint(prefecture='神奈川県', municipality='横浜市中区', value=20.0),
-    ],
-)
-print('OK: render_spider(municipality) ->', key)
+# 正常系: 施設(緯度経度)を起点にした市区町村レベルのスパイダーマップ相当
+points = [
+    MapPoint(prefecture='東京都', municipality='府中市', value=10.0),
+    MapPoint(prefecture='神奈川県', municipality='横浜市中区', value=20.0),
+]
+_validate_map_points('municipality', points)
+key = _render_map_html(mode='spider', level='municipality', points=points, origin=(139.7671, 35.6812))
+print('OK: spider(municipality) ->', key)
 
 # 正常系: 都道府県レベル(回帰確認)
-key = render_spider(
-    level='prefecture',
-    origin_lat=35.6895,
-    origin_lon=139.6917,
-    points=[MapPoint(prefecture='大阪府', value=5.0)],
-)
-print('OK: render_spider(prefecture) ->', key)
+points = [MapPoint(prefecture='大阪府', value=5.0)]
+_validate_map_points('prefecture', points)
+key = _render_map_html(mode='spider', level='prefecture', points=points, origin=(139.6917, 35.6895))
+print('OK: spider(prefecture) ->', key)
 "
 ```
 
