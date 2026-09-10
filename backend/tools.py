@@ -22,7 +22,10 @@ _LEVEL_FILES: dict[LevelName, tuple[str, str]] = {
 
 @dataclass(frozen=True)
 class _LevelData:
-    """levelごとの地図データ(パース済みGeoJSON FeatureCollectionと地点名→座標の辞書)。"""
+    """levelごとの地図データ。
+
+    パース済みGeoJSON FeatureCollectionと地点名→座標の辞書を保持する。
+    """
 
     geojson: dict
     points: dict[str, list[float]]
@@ -167,7 +170,10 @@ class MapPoint(BaseModel):
 
 @tool
 def render_choropleth(level: LevelName, points: list[MapPoint]) -> str:
-    """指定レベル(都道府県 or 市区町村)の単位で数値を地図上に塗り分け表示する。市区町村レベルの場合、pointsは50件までしか指定できない。"""
+    """指定レベル(都道府県 or 市区町村)の単位で数値を地図上に塗り分け表示する。
+
+    市区町村レベルの場合、pointsは50件までしか指定できない。
+    """
     points = [MapPoint.model_validate(p) for p in points]
     _validate_map_points(level, points)
 
@@ -178,7 +184,10 @@ def render_choropleth(level: LevelName, points: list[MapPoint]) -> str:
 def render_spider(
     level: LevelName, origin_lat: float, origin_lon: float, points: list[MapPoint]
 ) -> str:
-    """起点となる緯度経度から、指定レベル(都道府県 or 市区町村)の各地点への流動線を地図上に描く。線の太さは値に比例する。市区町村レベルの場合、pointsは50件までしか指定できない。"""
+    """起点となる緯度経度から、指定レベルの各地点への流動線を地図上に描く。
+
+    線の太さは値に比例する。市区町村レベルの場合、pointsは50件までしか指定できない。
+    """
     points = [MapPoint.model_validate(p) for p in points]
     _validate_map_points(level, points)
 
@@ -194,24 +203,35 @@ def _point_key(level: LevelName, prefecture: str, municipality: str | None) -> s
     """levelに応じてMapPointから座標辞書の検索キーを作る。"""
     if level == "municipality":
         if not municipality:
-            raise ValueError("levelが'municipality'の場合はmunicipalityの指定が必須です")
+            raise ValueError(
+                "levelが'municipality'の場合はmunicipalityの指定が必須です"
+            )
         return f"{prefecture}{municipality}"
+    if municipality:
+        raise ValueError(
+            f"levelが'prefecture'の場合はmunicipalityを指定できません: {municipality}"
+        )
     return prefecture
 
 
 def _validate_map_points(level: LevelName, points: list[MapPoint]) -> None:
-    """MapPointのリストが空でなく、件数上限内で、すべて既知の地点かを検証する。"""
+    """MapPointのリストが空でなく、件数上限内で、重複がなく、すべて既知の地点かを検証する。"""
     if not points:
         raise ValueError("pointsが空です")
     if level == "municipality" and len(points) > _MUNICIPALITY_POINTS_LIMIT:
         raise ValueError(
-            f"市区町村レベルで指定できるpointsは{_MUNICIPALITY_POINTS_LIMIT}件までです(指定件数: {len(points)})"
+            f"市区町村レベルで指定できるpointsは{_MUNICIPALITY_POINTS_LIMIT}件までです"
+            f"(指定件数: {len(points)})"
         )
     known = _LEVEL_DATA[level].points
+    seen: set[str] = set()
     for point in points:
         key = _point_key(level, point.prefecture, point.municipality)
         if key not in known:
             raise ValueError(f"未知の地点です: {key}")
+        if key in seen:
+            raise ValueError(f"pointsに同じ地点が重複しています: {key}")
+        seen.add(key)
 
 
 def _point_config(level: LevelName, point: MapPoint) -> dict:
@@ -252,7 +272,8 @@ def _render_map_html(
     }
 
     html = _MAP_TEMPLATE.replace(
-        "{{regions_geojson}}", json.dumps(_regions_geojson(level, points), ensure_ascii=False)
+        "{{regions_geojson}}",
+        json.dumps(_regions_geojson(level, points), ensure_ascii=False),
     )
     html = html.replace("{{map_config}}", json.dumps(config))
     return upload_html(html)
