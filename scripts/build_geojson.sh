@@ -14,9 +14,10 @@ trap 'rm -rf "$WORKDIR"' EXIT
 SHAPE_DIR="${REPO_ROOT}/shapefile"
 
 case "$LEVEL" in
-  prefecture)   DISSOLVE_FIELDS="PREF_NAME" ;;
-  municipality) DISSOLVE_FIELDS="PREF_NAME,CITY_NAME" ;;
-  town)         DISSOLVE_FIELDS="PREF_NAME,CITY_NAME,S_NAME" ;;
+  # 都道府県は他レベルより粗く簡略化する(小さい離島群が遠目でつぶれて見づらくなるため)
+  prefecture)   DISSOLVE_FIELDS="PREF_NAME";                          SIMPLIFY_PCT="1%" ;;
+  municipality) DISSOLVE_FIELDS="PREF_NAME,CITY_NAME";                SIMPLIFY_PCT="10%" ;;
+  town)         DISSOLVE_FIELDS="PREF_NAME,CITY_NAME,S_NAME";         SIMPLIFY_PCT="10%" ;;
   *)
     echo "不明なlevelです: ${LEVEL} (prefecture|municipality|townを指定してください)" >&2
     exit 1
@@ -61,7 +62,7 @@ find "$EXTRACT_DIR" -name '*.shp' -print0 | while IFS= read -r -d '' shp; do
     -proj wgs84 \
     -dissolve fields="$DISSOLVE_FIELDS" \
     -clean \
-    -simplify dp 10% keep-shapes \
+    -simplify dp "$SIMPLIFY_PCT" keep-shapes \
     -clean \
     -o format=geojson precision=0.0001 "$dissolved"
   python3 "${REPO_ROOT}/scripts/assemble_region_name.py" "$dissolved" "${OUT_DIR}/${name}.geojson" "$DISSOLVE_FIELDS"
