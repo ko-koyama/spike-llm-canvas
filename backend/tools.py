@@ -147,7 +147,7 @@ class MapPoint(BaseModel):
 def render_choropleth(level: LevelName, points: list[MapPoint]) -> str:
     """指定レベル(都道府県 / 市区町村 / 町丁目)の単位で数値を地図上に塗り分け表示する。
 
-    市区町村・町丁目レベルの場合、pointsは50件までしか指定できない。
+    市区町村・町丁目レベルの場合、pointsは100件までしか指定できない。
     """
     points = [MapPoint.model_validate(p) for p in points]
     _validate_map_points(level, points)
@@ -161,7 +161,7 @@ def render_spider(
 ) -> str:
     """起点となる緯度経度から、指定レベルの各地点への流動線を地図上に描く。
 
-    線の太さは値に比例する。市区町村・町丁目レベルの場合、pointsは50件までしか指定できない。
+    線の太さは値に比例する。市区町村・町丁目レベルの場合、pointsは100件までしか指定できない。
     """
     points = [MapPoint.model_validate(p) for p in points]
     _validate_map_points(level, points)
@@ -201,7 +201,7 @@ _LEVEL_DATA: dict[LevelName, _LevelData] = {
     level: _load_level_data(level) for level in get_args(LevelName)
 }
 
-_DETAILED_LEVEL_POINTS_LIMIT = 50
+_DETAILED_LEVEL_POINTS_LIMIT = 100
 
 
 def _validate_map_points(level: LevelName, points: list[MapPoint]) -> None:
